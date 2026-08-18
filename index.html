@@ -325,8 +325,13 @@
     <label>Character sheet</label>
     <p class="hint">Current state, refreshed by the Scribe each turn.</p>
     <pre id="sheet-body" style="white-space:pre-wrap; font-family:var(--sans); font-size:14px; line-height:1.6; margin-top:10px; color:var(--text);"></pre>
+    <label>Content</label>
+    <select id="sheet-mature">
+      <option value="0">Standard</option>
+      <option value="1">Mature — adult themes, romance and intimacy (18+)</option>
+    </select>
     <label>Game prompt</label>
-    <p class="hint">The ruleset your Game Master follows. Edit it to change how this game plays from the next turn onward.</p>
+    <p class="hint">The ruleset your Game Master follows. Edit it to change how this game plays from the next turn onward. Saving also applies the content setting above.</p>
     <textarea id="sheet-scenario" rows="9" style="margin-top:10px; font-size:13px; line-height:1.5;"></textarea>
     <div class="modal-footer">
       <button onclick="document.getElementById('sheet-modal').classList.add('hidden')">Close</button>
@@ -363,6 +368,11 @@ Noir, tense, morally grey. Fast pacing."></textarea>
       <option value="">Let the description decide</option>
       <option>Adventurous</option><option>Dark & gritty</option><option>Lighthearted & funny</option>
       <option>Mysterious</option><option>Epic & dramatic</option><option>Cozy & relaxing</option>
+    </select>
+    <label>Content</label>
+    <select id="c-mature">
+      <option value="0">Standard</option>
+      <option value="1">Mature — adult themes, romance and intimacy (18+)</option>
     </select>
     <p id="c-status" class="hint hidden" style="margin-top:14px; color:var(--accent);"></p>
     <div class="modal-footer">
@@ -500,6 +510,8 @@ const PACING_RULE = `- Pacing — this is a game, not a novel. Every scene the p
 - Auto-advance: when a scene's dramatic question is resolved (the fight ends, the technique is learned, the truth surfaces), do NOT stop there. Bridge with a brief montage and open the next playable scene in the same response, prompting the player inside it. Stop between scenes only at a genuine branch point where choosing the path is itself the game — and use a CHOICE prompt there.
 - [SKIP] means the player wants to move on. Compress the intervening time — hours, months, or years, whatever fits — into a brief montage of what happened and what changed, then open the next playable scene. If they name a target ("until the tournament", "until I reach Core Formation"), advance all the way there, resolving notable setbacks along the way with dice where warranted.`;
 
+const MATURE_RULE = `- Mature content: this game is for an adult player and adult themes are in scope. Do not sanitize the story — violence, cruelty, moral compromise, addiction, grief, and desire all belong here when the narrative earns them. Romance and physical attraction may develop naturally between the player's character and consenting adult characters, with real chemistry and tension rather than chaste deflection. Depict intimacy with sensual, evocative detail through the build-up and the moments around it, then close the scene on implication and resume afterward — never cut away awkwardly or refuse to acknowledge what happened, and never write explicit anatomical description. All characters are adults. Match the intensity to the tone of the game rather than inserting romance where the scene doesn't call for it.`;
+
 const PROMPT_RULE = `- End every response by prompting the player, in one of two styles. Either way the closing lines must make the immediate decision unmistakable — the player should never have to wonder what they are being asked. Never end on atmosphere, scenery, or a musing. Always close by addressing the player directly, naming the specific choice in front of them right now and anything that makes it urgent.
   OPEN (the default — roughly three of every four turns): no listed options, but a direct question or call to action that names the concrete decision at hand. Not "The wind moves through the empty courtyard." — instead "The courtyard is empty and the side gate is unbarred, but the patrol comes back within minutes. What do you do?"
   CHOICE (only at genuine branch points — irreversible decisions, a scene closing onto several distinct paths, tournament crossroads, or a player who seems stuck): 3–4 numbered options, concrete and meaningfully different, at least one bold or risky, plus a brief note that anything else is allowed. A bare number reply picks that option.
@@ -507,7 +519,7 @@ const PROMPT_RULE = `- End every response by prompting the player, in one of two
 
 const DICE_RULE = `- Dice: for any non-trivial action with a real chance of failure — combat, persuasion, stealth, theft, breakthroughs — call the roll_dice tool BEFORE narrating the outcome. Set the die size and the mixed/success thresholds honestly from the difficulty and the character's current abilities, then narrate strictly according to the returned outcome. Never soften a failure into a success, and never roll for trivial actions. Roll AT MOST ONCE per player turn: pick the single most pivotal uncertainty and let its outcome color the lesser risks in the narration.`;
 
-function buildSystemPrompt(scenario, tone, hasOpening) {
+function buildSystemPrompt(scenario, tone, hasOpening, mature) {
   return `You are the Game Master of an interactive text adventure. You run the world; the player controls only their own character.
 
 Scenario: ${scenario}
@@ -524,7 +536,7 @@ ${DICE_RULE}
 - Introduce concrete details: names, sensory description, and occasional dialogue from NPCs.
 - Track the player's items, injuries, relationships, and goals implicitly and keep them consistent.
 ${PROMPT_RULE}
-- Formatting: write mostly plain prose. You may use **bold** sparingly for emphasis, and a fenced code block for any status panel or stat display the scenario requires. Never use markdown tables, nested lists, or link syntax.
+${mature ? MATURE_RULE + '\n' : ''}- Formatting: write mostly plain prose. You may use **bold** sparingly for emphasis, and a fenced code block for any status panel or stat display the scenario requires. Never use markdown tables, nested lists, or link syntax.
 
 ${hasOpening
   ? 'The prologue was pre-written and has already been shown to the player as your first message. Continue the story from the player\'s reply to it.'
@@ -646,6 +658,7 @@ function openSheet() {
     (game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.') + memoryHealth(game) + backupNudge(game);
   // older saves have no stored scenario; fall back to the full system prompt
   document.getElementById('sheet-scenario').value = game?.scenario || game?.systemPrompt || '';
+  document.getElementById('sheet-mature').value = game?.mature ? '1' : '0';
   document.getElementById('sheet-modal').classList.remove('hidden');
 }
 
@@ -653,11 +666,14 @@ function saveGamePrompt() {
   if (!game) return;
   const text = document.getElementById('sheet-scenario').value.trim();
   if (!text) return;
+  game.mature = document.getElementById('sheet-mature').value === '1';
   if (game.scenario) {
     game.scenario = text;
-    game.systemPrompt = buildSystemPrompt(text, game.tone || '', !!game.hasOpening);
+    game.systemPrompt = buildSystemPrompt(text, game.tone || '', !!game.hasOpening, game.mature);
   } else {
-    game.systemPrompt = text;   // legacy save: the field is the whole prompt
+    // legacy save: the field is the whole prompt, so append/strip the directive directly
+    game.systemPrompt = text.replace(MATURE_RULE, '').trim();
+    if (game.mature) game.systemPrompt += '\n' + MATURE_RULE;
   }
   putSave(game);
   document.getElementById('sheet-modal').classList.add('hidden');
@@ -705,7 +721,7 @@ function renderStory() {
 }
 
 /* ================= game flow ================= */
-function startAdventure(title, scenario, tone, opening, setup, brief) {
+function startAdventure(title, scenario, tone, opening, setup, brief, mature) {
   if (!requireKey()) return;
   // per-game random facts (e.g. Azure Heavens' rolled spirit root) get baked
   // into this game's rules at creation so they stay fixed for its whole life
@@ -715,9 +731,10 @@ function startAdventure(title, scenario, tone, opening, setup, brief) {
     title,
     brief: brief || '',                 // the player's own description, for reference/editing
     scenario: fullScenario,             // the compiled ruleset (editable per game)
-    systemPrompt: buildSystemPrompt(fullScenario, tone, !!opening),
+    systemPrompt: buildSystemPrompt(fullScenario, tone, !!opening, !!mature),
     tone: tone || '',
     hasOpening: !!opening,
+    mature: !!mature,
     messages: [],
     usage: blankUsage(),
     updated: Date.now(),
@@ -757,7 +774,7 @@ function loadPreset(id) {
 }
 
 /* Game Designer: reads a freeform description, compiles a specialized GM ruleset */
-async function designGame(brief, tone) {
+async function designGame(brief, tone, mature) {
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: apiHeaders(),
@@ -777,7 +794,7 @@ Output ONLY the briefing, as compact prose and short labelled lines — no pream
 - An opening hook for the very first scene.
 
 Rules: honor everything the player specified — never contradict or water down their mechanics. Fill gaps with specific, well-judged choices rather than vague options. Invent nothing that fights the described premise. Keep the whole briefing under 700 words. Aim for pacing that keeps the story moving unless the player explicitly asked for a slow burn.`,
-      messages: [{ role: 'user', content: `Player's game description:\n\n${brief}${tone ? `\n\nRequested tone: ${tone}` : ''}` }],
+      messages: [{ role: 'user', content: `Player's game description:\n\n${brief}${tone ? `\n\nRequested tone: ${tone}` : ''}${mature ? '\n\nThis is an adult (18+) game: build the briefing so romance, desire, and mature themes have real room in the story where the premise supports them.' : ''}` }],
     }),
   });
   if (!resp.ok) {
@@ -800,6 +817,7 @@ async function startCustom() {
   const brief = document.getElementById('c-brief').value.trim();
   const tone = document.getElementById('c-tone').value;
   const title = document.getElementById('c-title').value.trim();
+  const mature = document.getElementById('c-mature').value === '1';
   if (!brief) { alert('Describe the game you want first.'); return; }
 
   const go = document.getElementById('c-go');
@@ -808,11 +826,11 @@ async function startCustom() {
   status.classList.remove('hidden');
   status.textContent = 'The Game Designer is building your ruleset…';
   try {
-    const scenario = await designGame(brief, tone);
+    const scenario = await designGame(brief, tone, mature);
     closeCustom();
     go.disabled = false;
     status.classList.add('hidden');
-    startAdventure(title || brief.slice(0, 40), scenario, tone, null, null, brief);
+    startAdventure(title || brief.slice(0, 40), scenario, tone, null, null, brief, mature);
   } catch (err) {
     go.disabled = false;
     status.style.color = 'var(--danger)';
