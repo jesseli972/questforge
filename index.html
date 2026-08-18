@@ -116,7 +116,7 @@
   .story {
     flex: 1; overflow-y: auto; padding: 24px 20px 12px; scroll-behavior: smooth;
   }
-  .turn { margin-bottom: 22px; line-height: 1.7; font-size: var(--story-size, 16px); }
+  .turn { margin-bottom: 22px; line-height: 1.7; font-size: var(--story-size, 19px); }
   .turn.gm { font-family: var(--story-font, var(--serif)); white-space: pre-wrap; }
   .turn.gm strong { color: #f4ead5; font-weight: 700; }
   .turn.gm em { color: #cfc2a8; }
@@ -152,6 +152,19 @@
   .mode-row { display: flex; gap: 6px; margin-bottom: 8px; }
   .mode-btn { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
   .mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  .dice {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px;
+    background: var(--accent-soft); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 9px 13px; margin: 0 0 22px;
+    font-family: var(--sans); font-size: 14px;
+  }
+  .dice .roll { font-size: 21px; color: var(--accent); font-weight: 700; }
+  .dice .dsides { color: var(--text-dim); }
+  .dice .outcome.success { color: #8fbf72; font-weight: 700; }
+  .dice .outcome.mixed { color: var(--accent); font-weight: 700; }
+  .dice .outcome.failure { color: var(--danger); font-weight: 700; }
+  .dice .thr { color: var(--text-dim); font-size: 12px; width: 100%; }
 
   .banner {
     background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text);
@@ -226,14 +239,19 @@
     </select>
     <label>Story text size</label>
     <select id="set-size">
-      <option value="14">Small</option>
-      <option value="16">Medium</option>
-      <option value="19">Large</option>
+      <option value="small">Small</option>
+      <option value="medium">Medium</option>
+      <option value="large">Large</option>
     </select>
     <label>Story font</label>
     <select id="set-font">
       <option value="serif">Serif</option>
       <option value="sans">Sans</option>
+    </select>
+    <label>Dice</label>
+    <select id="set-karmic">
+      <option value="1">Karmic dice — a bad roll raises the floor of the next</option>
+      <option value="0">Pure random</option>
     </select>
     <div class="modal-footer">
       <button onclick="closeSettings()">Cancel</button>
@@ -272,13 +290,13 @@ const ADVENTURES = [
     blurb:'A transmigrated soul claws from mortal to Heavenly Immortal in a world of sects, tournaments, and merciless fate.',
     prompt:`A high-fantasy xianxia cultivation RPG set in the Azure Heavens — a vast continent of spirit veins, floating mountains, and ancient ruins, contested by three superpowers: the righteous Martial Alliance (the Namgung sword clan, the poison-master Tang clan, the strategist Jaegal clan, and sects like Mount Hua, Wudang, Shaolin, and KongTong), the unpredictable Chaotic Faction (the fiercely independent Moyong clan, Kunlun, Diancang), and the ruthless Demonic Sect (which has blackmailed Huashan and Hwang Bo, and whose legendary Heavenly Demon is rumored to be returning). The neutral Habuk-Peng clan sells raw strength to the highest bidder. Rare Mystical Realms — pocket dimensions dense with spirit energy — appear during celestial alignments and are fiercely contested.
 
-The player is a transmigrated soul from modern Earth who wakes in this brutal world. The prologue has already been shown to the player as your first message, ending in a choice of four starting fates. Their first reply selects one (a number, or a custom beginning they describe). Honor the choice exactly: assign the matching spirit root, Innate Constitution, and a fitting starting location, then open LOG 01-A at that location with the full Panel. Spirit root tiers: Heavenly single roots are genius-tier (2–3x speed); True double/triple roots are strong; four/five mixed roots are slow "trash" roots; Mutant roots (Lightning, Ice, Wind, Darkness) grant unique combat abilities; Chaos/Void roots are vanishingly rare. Root quality ranks: Mortal, Low, Intermediate, High, Supreme/Stainless.
+The player is a transmigrated soul from modern Earth who wakes in this brutal world. The prologue has already been shown to the player as your first message, ending in a choice of four STARTING LOCATIONS. Their first reply selects one (a number, or a custom starting point they describe). The player chooses only WHERE they begin — their spirit root and Innate Constitution were already rolled by fate and appear below as immutable facts. Open LOG 01-A at the chosen location and reveal the rolled root and constitution dramatically as the Cultivation Panel finishes initializing, then show the full Panel. Spirit root tiers: Heavenly single roots are genius-tier (2–3x speed); True double/triple roots are strong; four/five mixed roots are slow "trash" roots; Mutant roots (Lightning, Ice, Wind, Darkness) grant unique combat abilities; Chaos/Void roots are vanishingly rare. Root quality ranks: Mortal, Low, Intermediate, High, Supreme/Stainless.
 
 Mechanics to enforce every turn:
 - End EVERY response by displaying The Panel in a compact fixed format: Realm & Stage, Qi Saturation, Lifespan, Physical Temple (Strength/Agility/Constitution), Cultivation Technique (only one active; switching to a clashing technique risks severe Qi Deviation), Martial Techniques with mastery (Beginner/Intermediate/Greater/Perfect), and Innate Constitution. Values change; categories never do — never add or remove Panel fields.
 - Realms in order: Qi Refining, Foundation Establishment, Core Formation, Golden Core, Nascent Soul, Void Refining, Half-Immortal, Earth Immortal, Heavenly Immortal — each with Early/Mid/Late/Peak stages. Qi requirements double per minor stage and increase 5x per major realm. Breakthroughs can fail, causing Qi Deviation or death.
 - Label every scene with a Log ID (LOG 01-A, LOG 01-B, ...). If the player asks to revert to a Log ID, resume the story from that state.
-- Adjudicate risky actions honestly against realm gaps and stats; success thresholds scale with realm. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
+- Use the roll_dice tool for risky actions, with thresholds set from realm gaps and stats; success thresholds scale with Realm progression. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
 - Meditation can trigger time skips of months to decades. The Dragon & Phoenix Festival (geniuses under 20) and the decennial Grand Azure Tournament (ages 20–100) are pivotal events; death in a tournament is a permanent Game Over — announce it and end the story.
 
 Tone: serious, epic, and philosophical. Pacing: very slow — emphasize the passage of years. Difficulty: high — death or permanent injury are common results of recklessness.`,
@@ -290,22 +308,56 @@ You wake face-down on stone that smells of incense and old blood. Your hands are
 
 \`\`\`
 ═══ CULTIVATION PANEL — INITIALIZING ═══
-Awaiting fate selection...
+Spirit Root:    [SEALED — reveal on anchor]
+Constitution:   [SEALED — reveal on anchor]
+Awaiting anchor point...
 \`\`\`
 
-The Panel grants you one mercy before this world takes hold: the shape of your beginning.
+What you *are* — your spirit root, your constitution — fate wove long before you arrived, and the Panel keeps its secrets sealed until your soul takes anchor. All it grants you is the choice of **where** this life begins:
 
-**Choose your fate:**
+1. **Azure Heaven Sect, outer courts** — a servant-disciple in a minor Alliance sect. Techniques, pills, a path upward — and sect rules, senior brothers' fists, and ten thousand rivals on the same narrow bridge.
 
-1. **Namgung Guest Disciple** — Heavenly Sword Root (High) · Sword Bloodline. Genius-tier cultivation speed and the Martial Alliance's finest resources — but every rival's eyes on your back, and clan politics that kill more disciples than demons do.
+2. **Tianyu, the Imperial trade city** — a street orphan in the greatest free city. Information, opportunity, black markets — and nobody to catch you when you starve, or when a gang knife finds your ribs.
 
-2. **The Trash-Root Wanderer** — Five Mixed Roots (Mortal) · hidden Void Body (Supreme). Called worthless and free to go anywhere, carrying a dormant constitution that could one day devour all energy — if you survive long enough to awaken it.
+3. **The Border Clans** — youngest child of a small martial clan on the Demonic frontier. A family that would die for you — in a war that is coming for them.
 
-3. **Child of the Dark Path** — Mutant Darkness Root (Intermediate) · Shadow-Meld Physique. Unique combat arts the righteous sects fear. The Demonic Sect considers you property; the Alliance considers you a threat.
+4. **Cloudmist Village** — a farmhand in a hermit valley cultivators forgot. Safety, time, one strange old neighbor — and utter isolation from masters, resources, and tournaments.
 
-4. **The Hermit's Heir** — True Double Root, Water & Wood (High) · Longevity Vessel. A dead master's hidden cave, a complete cultivation technique, a jar of pills. No sect, no backing — and somewhere out there, the killers who know the cave exists.
-
-Type a number — or describe the beginning you want.` },
+Where does your soul anchor? Type a number — or name another beginning.`,
+    setup: () => {
+      const pick = entries => {
+        let r = Math.random() * entries.reduce((s, e) => s + e[1], 0);
+        for (const [item, w] of entries) { if ((r -= w) <= 0) return item; }
+        return entries[entries.length - 1][0];
+      };
+      const elems = ['Metal', 'Wood', 'Water', 'Fire', 'Earth'].sort(() => Math.random() - .5);
+      const root = pick([
+        ['Five Mixed Roots (all elements) — "trash roots"', 25],
+        [`Four Mixed Roots (${elems.slice(0, 4).join(', ')})`, 15],
+        [`True Triple Root (${elems.slice(0, 3).join(', ')})`, 15],
+        [`True Double Root (${elems.slice(0, 2).join(', ')})`, 15],
+        [`Heavenly Single Root (${elems[0]})`, 12],
+        [`Mutant ${pick([['Lightning', 1], ['Ice', 1], ['Wind', 1], ['Darkness', 1]])} Root`, 10],
+        ['Chaos Root — a five-element amalgam', 4],
+        ['Void Root — devours all energy', 4],
+      ]);
+      const quality = pick([['Mortal', 30], ['Low', 28], ['Intermediate', 22], ['High', 13], ['Supreme/Stainless', 7]]);
+      const constitution = pick([
+        ['Ordinary — no notable constitution', 40],
+        ['Iron Bone Physique — resilient body, slow to injure', 12],
+        ['Sword Bloodline — doubled comprehension of sword arts', 10],
+        ['Phoenix Marrow — minor regeneration, fire affinity', 9],
+        ['Longevity Vessel — +60 years of lifespan', 9],
+        ['Shadow-Meld Physique — melts into darkness', 8],
+        ['Poison Body — immune to toxins, feared when discovered', 6],
+        ['Void Body — devours all energy; dormant until triggered', 4],
+        ['Heavenly Dao Bone — doubled comprehension of all arts; attracts tribulation lightning', 2],
+      ]);
+      return `RANDOMLY ROLLED CHARACTER (already fixed by fate — immutable regardless of any player request):
+- Spirit Root: ${root}, quality rank ${quality}
+- Innate Constitution: ${constitution}
+Reveal both dramatically in your first scene, at the moment the Cultivation Panel finishes initializing.`;
+    } },
   { id:'starfall', emoji:'🚀', genre:'Sci-Fi', title:'Starfall Salvage',
     blurb:'Your junker crew found a derelict warship that should not exist. Something inside is still on.',
     prompt:'Hard sci-fi salvage adventure. The player captains a small, indebted salvage ship on the rim of settled space. They have just docked with a derelict military vessel missing for 80 years — its reactor is warm, and its logs are wrong.' },
@@ -350,6 +402,8 @@ const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(L
 const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
 
 /* ================= GM system prompt ================= */
+const DICE_RULE = `- Dice: for any non-trivial action with a real chance of failure — combat, persuasion, stealth, theft, breakthroughs — call the roll_dice tool BEFORE narrating the outcome. Set the die size and the mixed/success thresholds honestly from the difficulty and the character's current abilities, then narrate strictly according to the returned outcome. Never soften a failure into a success, and never roll for trivial actions.`;
+
 function buildSystemPrompt(scenario, tone, hasOpening) {
   return `You are the Game Master of an interactive text adventure. You run the world; the player controls only their own character.
 
@@ -361,6 +415,7 @@ Rules of play:
 - The world is persistent and consistent. NPCs have their own goals and memories. Actions have consequences that carry forward.
 - Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in).
 - Player actions can fail. Judge success by plausibility, established abilities, and dramatic stakes — bold risky moves should sometimes go wrong in interesting ways. Never let failure be a dead end.
+${DICE_RULE}
 - If the player attempts something impossible or tries to dictate outcomes for NPCs or the world in a [DO]/[SAY] input, narrate the attempt failing or being reinterpreted plausibly.
 - Introduce concrete details: names, sensory description, and occasional dialogue from NPCs.
 - Track the player's items, injuries, relationships, and goals implicitly and keep them consistent.
@@ -396,7 +451,7 @@ function renderHome() {
     const el = document.createElement('div');
     el.className = 'card';
     el.innerHTML = `<div class="emoji">${a.emoji}</div><div class="genre">${a.genre}</div><h3>${a.title}</h3><p>${a.blurb}</p>`;
-    el.onclick = () => startAdventure(a.title, a.prompt, null, a.opening);
+    el.onclick = () => startAdventure(a.title, a.prompt, null, a.opening, a.setup);
     grid.appendChild(el);
   }
 
@@ -448,6 +503,25 @@ function renderStory() {
   box.innerHTML = '';
   for (const m of game.messages) {
     if (m.role === 'user' && m.content === '[STORY] Begin the adventure.') continue;
+    if (Array.isArray(m.content)) {
+      // structured turns from the dice loop: narration text + rendered rolls
+      for (const b of m.content) {
+        if (b.type === 'text' && b.text.trim()) {
+          const div = document.createElement('div');
+          div.className = 'turn gm';
+          div.innerHTML = mdToHtml(b.text);
+          box.appendChild(div);
+        } else if (b.type === 'tool_result') {
+          try {
+            const div = document.createElement('div');
+            div.className = 'dice';
+            div.innerHTML = diceHtml(JSON.parse(b.content));
+            box.appendChild(div);
+          } catch {}
+        }
+      }
+      continue;
+    }
     const div = document.createElement('div');
     if (m.role === 'assistant') { div.className = 'turn gm'; div.innerHTML = mdToHtml(m.content); }
     else { div.className = 'turn player'; div.textContent = m.content.replace(/^\[(DO|SAY|STORY)\]\s*/, ''); }
@@ -457,12 +531,15 @@ function renderStory() {
 }
 
 /* ================= game flow ================= */
-function startAdventure(title, scenario, tone, opening) {
+function startAdventure(title, scenario, tone, opening, setup) {
   if (!requireKey()) return;
+  // per-game random facts (e.g. Azure Heavens' rolled spirit root) get baked
+  // into this game's rules at creation so they stay fixed for its whole life
+  const fullScenario = setup ? scenario + '\n\n' + setup() : scenario;
   game = {
     id: 'g' + Date.now(),
     title,
-    systemPrompt: buildSystemPrompt(scenario, tone, !!opening),
+    systemPrompt: buildSystemPrompt(fullScenario, tone, !!opening),
     messages: [],
     updated: Date.now(),
   };
@@ -514,6 +591,7 @@ function migrateRules(g) {
   for (const [oldText, newText] of RULE_MIGRATIONS) {
     if (g.systemPrompt.includes(oldText)) { g.systemPrompt = g.systemPrompt.replace(oldText, newText); changed = true; }
   }
+  if (!g.systemPrompt.includes('roll_dice')) { g.systemPrompt += '\n\nAdditional rule:\n' + DICE_RULE; changed = true; }
   if (changed) putSave(g);
 }
 
@@ -609,21 +687,142 @@ function maybeReplan(g) {
   }
 }
 
+/* ---- dice ---- */
+const DICE_TOOL = {
+  name: 'roll_dice',
+  description: 'Roll a die for a non-trivial action whose outcome is uncertain. You must set the thresholds BEFORE knowing the roll, honestly, from the difficulty of the action and the character\'s current abilities. The app rolls the die and returns the result; narrate strictly according to the outcome.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      label: { type: 'string', description: 'Short name of the check, e.g. "Stealth — slip past the night watch"' },
+      sides: { type: 'integer', description: 'Die size, typically 20 or 100' },
+      mixed_at: { type: 'integer', description: 'Minimum roll for a mixed / partial success' },
+      success_at: { type: 'integer', description: 'Minimum roll for a full success' },
+    },
+    required: ['label', 'sides', 'mixed_at', 'success_at'],
+  },
+};
+
+function rollDice(g, inp) {
+  const sides = Math.max(2, Math.min(1000, (inp.sides | 0) || 20));
+  let roll = 1 + Math.floor(Math.random() * sides);
+  let karmic = false;
+  // Karmic dice: two consecutive rolls can never average below 20% of max —
+  // a bad roll raises the floor of the next one.
+  if (getKarmic() && typeof g.lastRollNorm === 'number') {
+    const floor = Math.ceil((0.4 - g.lastRollNorm) * sides);
+    if (roll < floor) { roll = Math.min(floor, sides); karmic = true; }
+  }
+  g.lastRollNorm = roll / sides;
+  const mixedAt = Math.max(1, inp.mixed_at | 0), successAt = Math.max(mixedAt, inp.success_at | 0);
+  const outcome = roll >= successAt ? 'success' : roll >= mixedAt ? 'mixed' : 'failure';
+  return { label: String(inp.label || 'Check').slice(0, 120), sides, roll, outcome, mixed_at: mixedAt, success_at: successAt, karmic };
+}
+
+function diceHtml(r) {
+  const oc = r.outcome === 'mixed' ? 'Mixed success' : r.outcome[0].toUpperCase() + r.outcome.slice(1);
+  return `<span>🎲</span> <span class="roll">${r.roll}</span><span class="dsides">/d${r.sides}</span> — ${escapeHtml(r.label)} → <span class="outcome ${r.outcome}">${oc}</span>` +
+    `<span class="thr">fail &lt;${r.mixed_at} · mixed ${r.mixed_at}–${r.success_at - 1} · success ${r.success_at}+${r.karmic ? ' · karmic floor applied' : ''}</span>`;
+}
+
+function makeGmDiv(box) {
+  const d = document.createElement('div');
+  d.className = 'turn gm';
+  d.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+  return d;
+}
+
+/* One streamed narrator request; collects text and tool_use blocks */
+async function streamNarration(g, gmDiv, box) {
+  const cfg = engineConfig();
+  const body = {
+    model: cfg.narrator,
+    max_tokens: 8000, // hard cap on thinking + narration; generous so scenes never truncate
+    stream: true,
+    cache_control: { type: 'ephemeral' }, // auto-caches the whole conversation prefix
+    system: systemTextFor(g),
+    tools: [DICE_TOOL],
+    messages: g.messages,
+  };
+  if (supportsEffort(cfg.narrator)) body.output_config = { effort: 'low' };
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    let msg = `API error (${resp.status})`;
+    try { msg += ': ' + (await resp.json()).error.message; } catch {}
+    throw new Error(msg);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '', text = '', started = false, stopReason = null, curTool = null;
+  const blocks = [];
+
+  const feed = ev => {
+    if (ev.type === 'content_block_start') {
+      if (ev.content_block?.type === 'tool_use') curTool = { id: ev.content_block.id, name: ev.content_block.name, json: '' };
+      else if (ev.content_block?.type === 'text') blocks.push({ type: 'text', text: '' });
+    } else if (ev.type === 'content_block_delta') {
+      if (ev.delta?.type === 'text_delta') {
+        if (!started) { gmDiv.textContent = ''; started = true; }
+        text += ev.delta.text;
+        const last = blocks[blocks.length - 1];
+        if (last?.type === 'text') last.text += ev.delta.text;
+        gmDiv.innerHTML = mdToHtml(text);
+        box.scrollTop = box.scrollHeight;
+      } else if (ev.delta?.type === 'input_json_delta' && curTool) {
+        curTool.json += ev.delta.partial_json;
+      }
+    } else if (ev.type === 'content_block_stop') {
+      if (curTool) {
+        let input = {};
+        try { input = JSON.parse(curTool.json || '{}'); } catch {}
+        blocks.push({ type: 'tool_use', id: curTool.id, name: curTool.name, input });
+        curTool = null;
+      }
+    } else if (ev.type === 'message_delta') {
+      if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
+    } else if (ev.type === 'error') {
+      throw new Error(ev.error?.message || 'Stream error');
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let ev;
+      try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+      feed(ev);
+    }
+  }
+
+  if (stopReason === 'refusal') throw new Error('The model declined to continue this scene. Try a different action.');
+  return { blocks: blocks.filter(b => b.type !== 'text' || b.text.trim()), text, stopReason };
+}
+
 async function runGM(newMessages) {
   streaming = true;
   document.getElementById('send-btn').disabled = true;
 
   const g = game;
   const cfg = engineConfig();
+  const startLen = g.messages.length;
   g.messages.push(...newMessages);
   renderStory();
 
   const box = document.getElementById('story');
-  const gmDiv = document.createElement('div');
-  gmDiv.className = 'turn gm';
-  gmDiv.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
-  box.appendChild(gmDiv);
-  box.scrollTop = box.scrollHeight;
+  let gmDiv = makeGmDiv(box);
 
   try {
     // Director mode: draft the hidden story plan before the opening scene
@@ -634,58 +833,34 @@ async function runGM(newMessages) {
       gmDiv.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
     }
 
-    const body = {
-      model: cfg.narrator,
-      max_tokens: 8000, // hard cap on thinking + narration; generous so scenes never truncate
-      stream: true,
-      cache_control: { type: 'ephemeral' }, // auto-caches the whole conversation prefix
-      system: systemTextFor(g),
-      messages: g.messages,
-    };
-    if (supportsEffort(cfg.narrator)) body.output_config = { effort: 'low' };
+    // narrate → roll requested dice → narrate the outcome → … (bounded)
+    for (let hop = 0; hop < 5; hop++) {
+      const { blocks, text, stopReason } = await streamNarration(g, gmDiv, box);
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify(body),
-    });
-
-    if (!resp.ok) {
-      let msg = `API error (${resp.status})`;
-      try { msg += ': ' + (await resp.json()).error.message; } catch {}
-      throw new Error(msg);
-    }
-
-    // parse SSE stream
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '', fullText = '', started = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        let ev;
-        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
-        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
-          if (!started) { gmDiv.textContent = ''; started = true; }
-          fullText += ev.delta.text;
-          gmDiv.innerHTML = mdToHtml(fullText);
-          box.scrollTop = box.scrollHeight;
-        } else if (ev.type === 'message_delta' && ev.delta?.stop_reason === 'refusal') {
-          throw new Error('The model declined to continue this scene. Try a different action.');
-        } else if (ev.type === 'error') {
-          throw new Error(ev.error?.message || 'Stream error');
+      if (stopReason === 'tool_use' && blocks.some(b => b.type === 'tool_use')) {
+        g.messages.push({ role: 'assistant', content: blocks });
+        const results = [];
+        for (const b of blocks) {
+          if (b.type !== 'tool_use') continue;
+          const r = rollDice(g, b.input);
+          const d = document.createElement('div');
+          d.className = 'dice';
+          d.innerHTML = diceHtml(r);
+          box.appendChild(d);
+          results.push({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(r) });
         }
+        g.messages.push({ role: 'user', content: results });
+        if (text.trim()) gmDiv = makeGmDiv(box);        // keep the narration segment, open a new one
+        else box.appendChild(gmDiv);                    // move the placeholder below the dice
+        box.scrollTop = box.scrollHeight;
+        continue;
       }
+
+      if (!text.trim()) throw new Error('Empty response from the Game Master.');
+      g.messages.push({ role: 'assistant', content: text });
+      break;
     }
 
-    if (!fullText) throw new Error('Empty response from the Game Master.');
-    g.messages.push({ role: 'assistant', content: fullText });
     g.updated = Date.now();
     putSave(g);
     maybeReplan(g);
@@ -694,8 +869,8 @@ async function runGM(newMessages) {
     gmDiv.textContent = (err.name === 'TypeError')
       ? 'Could not reach the Game Master. Check your internet connection — and re-paste your API key in Settings; a hidden space or line break in the key causes exactly this error.'
       : (err.message || 'Something went wrong. Please try again.');
-    // roll back the player turn so it can be retried
-    g.messages = g.messages.slice(0, g.messages.length - newMessages.length);
+    // roll back the whole turn (player message + any partial hops) so it can be retried
+    g.messages = g.messages.slice(0, startLen);
   } finally {
     streaming = false;
     document.getElementById('send-btn').disabled = false;
@@ -704,11 +879,13 @@ async function runGM(newMessages) {
 }
 
 /* ================= settings & modals ================= */
-const getSize = () => store.getItem('qf_size') || '16';
+const SIZES = { small: '16px', medium: '19px', large: '22px' };
+const getSize = () => SIZES[store.getItem('qf_size2')] ? store.getItem('qf_size2') : 'medium';
 const getFont = () => store.getItem('qf_font') || 'serif';
+const getKarmic = () => (store.getItem('qf_karmic') ?? '1') === '1';
 function applyPrefs() {
   const root = document.documentElement.style;
-  root.setProperty('--story-size', getSize() + 'px');
+  root.setProperty('--story-size', SIZES[getSize()]);
   root.setProperty('--story-font', getFont() === 'sans' ? 'var(--sans)' : 'var(--serif)');
 }
 
@@ -717,14 +894,16 @@ function openSettings() {
   document.getElementById('set-model').value = getModel();
   document.getElementById('set-size').value = getSize();
   document.getElementById('set-font').value = getFont();
+  document.getElementById('set-karmic').value = getKarmic() ? '1' : '0';
   document.getElementById('settings-modal').classList.remove('hidden');
 }
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 function saveSettings() {
   store.setItem(LS.key, cleanKey(document.getElementById('set-key').value));
   store.setItem(LS.model, document.getElementById('set-model').value);
-  store.setItem('qf_size', document.getElementById('set-size').value);
+  store.setItem('qf_size2', document.getElementById('set-size').value);
   store.setItem('qf_font', document.getElementById('set-font').value);
+  store.setItem('qf_karmic', document.getElementById('set-karmic').value);
   applyPrefs();
   closeSettings();
   renderHome();
