@@ -376,7 +376,7 @@ Mechanics to enforce every turn:
 - Use the roll_dice tool for risky actions, with thresholds set from realm gaps and stats; success thresholds scale with Realm progression. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
 - Meditation can trigger time skips of months to decades. The Dragon & Phoenix Festival (geniuses under 20) and the decennial Grand Azure Tournament (ages 20–100) are pivotal events; death in a tournament is a permanent Game Over — announce it and end the story.
 
-Tone: serious, epic, and philosophical. Pacing: deliberate but always moving — a campaign spans years, so compress training, travel, and seclusion into montages and land each scene at a decision rather than narrating day-to-day life. Difficulty: high — death or permanent injury are common results of recklessness.`,
+Tone: serious, epic, and philosophical. PACING DIRECTIVE — ANIME: run this like a shonen cultivation anime, not a web novel. The player only plays fights, tournaments, breakthroughs, discoveries, and charged confrontations; everything between is a hard-cut montage. Escalate in arcs — each arc a stronger rival, a deeper secret, a bigger stage. End scenes on hooks. Power-ups land with drama: name the technique, show the gap it closes. Years may pass in a single sentence; a decisive exchange of blows may deserve a whole scene. Difficulty: high — death or permanent injury are common results of recklessness.`,
     opening: `# LOG 00 — Prologue
 
 Headlights. A horn. Cold.
@@ -484,8 +484,9 @@ const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(L
 const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
 
 /* ================= GM system prompt ================= */
-const PACING_RULE = `- Pacing: every response must move the story forward — a new development, a consequence, a scene change, or a jump in time. Never restate the situation or stall in place. When an action implies a long stretch of effort (training, travel, waiting, recovery), compress it into a short montage and land at the next meaningful moment rather than narrating it beat by beat.
-- [SKIP] means the player wants to move on. Compress the intervening time — hours, months, or years, whatever fits — into a brief montage of what happened and what changed, then open the next significant scene at a decision point. If they name a target ("until the tournament", "until I reach Core Formation"), advance all the way there, resolving notable setbacks along the way with dice where warranted.`;
+const PACING_RULE = `- Pacing — this is a game, not a novel. Every scene the player actually plays must carry stakes or meaningful change: a threat, a contest, a discovery, a confrontation, a gain. What qualifies scales to the genre — a duel in a martial world, a rival's sabotage in a cozy shop, an interrogation in a mystery. Everything else — travel, routine, logistics, recovery, pleasantries — is compressed into a 1–3 sentence montage inside the opening of the next real scene, never played out.
+- Auto-advance: when a scene's dramatic question is resolved (the fight ends, the technique is learned, the truth surfaces), do NOT stop there. Bridge with a brief montage and open the next playable scene in the same response, prompting the player inside it. Stop between scenes only at a genuine branch point where choosing the path is itself the game — and use a CHOICE prompt there.
+- [SKIP] means the player wants to move on. Compress the intervening time — hours, months, or years, whatever fits — into a brief montage of what happened and what changed, then open the next playable scene. If they name a target ("until the tournament", "until I reach Core Formation"), advance all the way there, resolving notable setbacks along the way with dice where warranted.`;
 
 const PROMPT_RULE = `- End every response by prompting the player, in one of two styles:
   OPEN (the default — roughly three of every four turns): finish with a single evocative line that invites action — a question, a looming threat, an unresolved moment — with NO listed options.
@@ -800,6 +801,15 @@ const RULE_MIGRATIONS = [
    PROMPT_RULE],
   ['- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.',
    PROMPT_RULE],
+  // pacing v1 → genre-relative stakes + auto-advance
+  [`- Pacing: every response must move the story forward — a new development, a consequence, a scene change, or a jump in time. Never restate the situation or stall in place. When an action implies a long stretch of effort (training, travel, waiting, recovery), compress it into a short montage and land at the next meaningful moment rather than narrating it beat by beat.
+- [SKIP] means the player wants to move on. Compress the intervening time — hours, months, or years, whatever fits — into a brief montage of what happened and what changed, then open the next significant scene at a decision point. If they name a target ("until the tournament", "until I reach Core Formation"), advance all the way there, resolving notable setbacks along the way with dice where warranted.`,
+   PACING_RULE],
+  // Azure Heavens pacing history → anime directive
+  ['Pacing: very slow — emphasize the passage of years.',
+   'PACING DIRECTIVE — ANIME: run this like a shonen cultivation anime, not a web novel. The player only plays fights, tournaments, breakthroughs, discoveries, and charged confrontations; everything between is a hard-cut montage. Escalate in arcs — each arc a stronger rival, a deeper secret, a bigger stage. End scenes on hooks. Power-ups land with drama. Years may pass in a single sentence; a decisive exchange of blows may deserve a whole scene.'],
+  ['Pacing: deliberate but always moving — a campaign spans years, so compress training, travel, and seclusion into montages and land each scene at a decision rather than narrating day-to-day life.',
+   'PACING DIRECTIVE — ANIME: run this like a shonen cultivation anime, not a web novel. The player only plays fights, tournaments, breakthroughs, discoveries, and charged confrontations; everything between is a hard-cut montage. Escalate in arcs — each arc a stronger rival, a deeper secret, a bigger stage. End scenes on hooks. Power-ups land with drama. Years may pass in a single sentence; a decisive exchange of blows may deserve a whole scene.'],
 ];
 function migrateRules(g) {
   let changed = false;
@@ -983,7 +993,7 @@ async function planStory(g) {
       max_tokens: 4000,
       output_config: { effort: 'low' },
       cache_control: { type: 'ephemeral' },
-      system: `You are the Story Director for an interactive text adventure. You never write narration. You write a compact hidden plan (under 300 words) for the narrator to follow: the main arc and current act, 2–3 NPC secrets and motivations, one planned twist, active threats, and pacing guidance for the next few scenes.\n\nThe adventure's premise and rules:\n${g.systemPrompt}`,
+      system: `You are the Story Director for an interactive text adventure. You never write narration. You write a compact hidden plan (under 300 words) for the narrator to follow: the main arc and current act, 2–3 NPC secrets and motivations, one planned twist, active threats, and pacing guidance for the next few scenes. Structure the plan as escalating arcs, like a season of an action series — each arc a stronger opponent, a deeper secret, a bigger stage, with a clear milestone the player can win.\n\nThe adventure's premise and rules:\n${g.systemPrompt}`,
       messages: [{ role: 'user', content: ask }],
     }),
   });
