@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="QuestForge">
+<meta name="theme-color" content="#12100d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>QuestForge — Shape your story</title>
+<style>
+  :root {
+    --bg: #12100d;
+    --bg-2: #1c1915;
+    --bg-3: #26221c;
+    --border: #3a342b;
+    --text: #e8e0d0;
+    --text-dim: #9a8f7a;
+    --accent: #d9962e;
+    --accent-soft: #d9962e33;
+    --danger: #c05b4d;
+    --serif: Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+  h1, h2, h3, .brand { font-family: var(--serif); }
+
+  /* ---------- layout ---------- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  .brand { font-size: 22px; color: var(--accent); cursor: pointer; user-select: none; }
+  .brand span { color: var(--text); }
+  .header-btns { display: flex; gap: 10px; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  button {
+    background: var(--bg-3); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+    font-family: var(--sans);
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #1a1509; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  input, textarea, select {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 15px;
+    font-family: var(--sans);
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  label { display: block; font-size: 13px; color: var(--text-dim); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ---------- home ---------- */
+  .hero { text-align: center; margin: 30px 0 40px; }
+  .hero h1 { font-size: 42px; color: var(--text); }
+  .hero h1 em { color: var(--accent); font-style: italic; }
+  .hero p { color: var(--text-dim); margin-top: 10px; font-size: 16px; }
+
+  .section-title { font-size: 20px; margin: 36px 0 14px; color: var(--text); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; cursor: pointer; transition: transform .12s, border-color .12s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .card .emoji { font-size: 30px; }
+  .card h3 { font-size: 17px; }
+  .card .genre { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+  .card p { font-size: 13px; color: var(--text-dim); line-height: 1.45; }
+  .card.custom { border-style: dashed; align-items: center; justify-content: center; text-align: center; min-height: 150px; }
+
+  .save-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 10px;
+  }
+  .save-row .meta { min-width: 0; }
+  .save-row .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .save-row .sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .save-row .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  /* ---------- modal ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal {
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
+    padding: 26px; width: 100%; max-width: 560px; max-height: 88vh; overflow-y: auto;
+  }
+  .modal h2 { margin-bottom: 4px; }
+  .modal .hint { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+  /* ---------- play screen ---------- */
+  .play-wrap { display: flex; flex-direction: column; height: calc(100vh - 61px); height: calc(100dvh - 61px); max-width: 860px; margin: 0 auto; }
+  .story {
+    flex: 1; overflow-y: auto; padding: 24px 20px 12px; scroll-behavior: smooth;
+  }
+  .turn { margin-bottom: 22px; line-height: 1.65; font-size: 16px; }
+  .turn.gm { font-family: var(--serif); white-space: pre-wrap; }
+  .turn.player {
+    background: var(--bg-3); border-left: 3px solid var(--accent);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; color: var(--text);
+    font-style: italic; white-space: pre-wrap;
+  }
+  .turn.player::before { content: "You"; display: block; font-style: normal; font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+  .turn.error { color: var(--danger); font-size: 14px; border: 1px solid var(--danger); border-radius: 8px; padding: 10px 14px; }
+  .thinking-dots { color: var(--text-dim); font-style: italic; }
+
+  .composer {
+    border-top: 1px solid var(--border); padding: 14px 20px 18px; background: var(--bg);
+  }
+  .composer-inner { display: flex; gap: 10px; align-items: flex-end; }
+  .composer textarea { resize: none; min-height: 48px; max-height: 160px; }
+  .mode-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .mode-btn { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+  .mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  .banner {
+    background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text);
+    border-radius: 10px; padding: 12px 16px; font-size: 14px; margin-bottom: 20px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .hidden { display: none !important; }
+  @media (max-width: 600px) { .hero h1 { font-size: 30px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand" onclick="goHome()">Quest<span>Forge</span></div>
+  <div class="header-btns">
+    <button id="btn-home" class="hidden" onclick="goHome()">← Library</button>
+    <button onclick="openSettings()">⚙ Settings</button>
+  </div>
+</header>
+
+<!-- ============ HOME ============ -->
+<main id="view-home">
+  <div class="hero">
+    <h1>Shape your <em>story</em></h1>
+    <p>Text adventures run by an AI Game Master. Pick a world — or build your own.</p>
+  </div>
+
+  <div id="key-banner" class="banner hidden">
+    <span>Add your Anthropic API key to start playing. It's stored only in this browser.</span>
+    <button class="primary" onclick="openSettings()">Add key</button>
+  </div>
+
+  <div id="saves-section" class="hidden">
+    <h2 class="section-title">Continue playing</h2>
+    <div id="saves-list"></div>
+  </div>
+
+  <h2 class="section-title">Adventures</h2>
+  <div class="grid" id="adventure-grid"></div>
+</main>
+
+<!-- ============ PLAY ============ -->
+<div id="view-play" class="play-wrap hidden">
+  <div class="story" id="story"></div>
+  <div class="composer">
+    <div class="mode-row">
+      <button class="mode-btn active" data-mode="do" onclick="setMode('do')">Do</button>
+      <button class="mode-btn" data-mode="say" onclick="setMode('say')">Say</button>
+      <button class="mode-btn" data-mode="story" onclick="setMode('story')">Story</button>
+    </div>
+    <div class="composer-inner">
+      <textarea id="player-input" rows="1" placeholder="What do you do?"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendTurn();}"></textarea>
+      <button class="primary" id="send-btn" onclick="sendTurn()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div id="settings-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Settings</h2>
+    <p class="hint">Your API key is stored in this browser's localStorage and sent only to api.anthropic.com. Get one at <b>platform.claude.com</b>.</p>
+    <label>Anthropic API key</label>
+    <input id="set-key" type="password" placeholder="sk-ant-...">
+    <label>Model</label>
+    <select id="set-model">
+      <option value="claude-opus-5">Claude Opus 5 — best storytelling</option>
+      <option value="claude-sonnet-5">Claude Sonnet 5 — fast & great</option>
+      <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest & cheapest</option>
+    </select>
+    <div class="modal-footer">
+      <button onclick="closeSettings()">Cancel</button>
+      <button class="primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CUSTOM ADVENTURE MODAL ============ -->
+<div id="custom-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Custom adventure</h2>
+    <p class="hint">Describe the world you want. The Game Master fills in everything you leave blank.</p>
+    <label>Setting / world</label>
+    <textarea id="c-setting" rows="2" placeholder="A rain-soaked cyberpunk megacity ruled by rival AI cartels..."></textarea>
+    <label>Your character</label>
+    <textarea id="c-character" rows="2" placeholder="A washed-up courier with a stolen prototype implant..."></textarea>
+    <label>Tone</label>
+    <select id="c-tone">
+      <option>Adventurous</option><option>Dark & gritty</option><option>Lighthearted & funny</option>
+      <option>Mysterious</option><option>Epic & dramatic</option><option>Cozy & relaxing</option>
+    </select>
+    <label>Opening quest or goal (optional)</label>
+    <input id="c-quest" placeholder="Find out who framed you for the senator's murder">
+    <div class="modal-footer">
+      <button onclick="closeCustom()">Cancel</button>
+      <button class="primary" onclick="startCustom()">Begin adventure</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= adventure library ================= */
+const ADVENTURES = [
+  { id:'azure',   emoji:'⛰️', genre:'Fantasy · Cultivation', title:'Azure Heavens',
+    blurb:'Rise from mortal outer disciple to immortal legend in a sect full of rivals and secrets.',
+    prompt:'A xianxia cultivation world. The player is a talentless outer disciple of the Azure Heaven Sect who has just discovered a mysterious jade pendant containing the fading spirit of an ancient cultivator. Rivals scheme, elders test, and the path to immortality is cruel.' },
+  { id:'starfall', emoji:'🚀', genre:'Sci-Fi', title:'Starfall Salvage',
+    blurb:'Your junker crew found a derelict warship that should not exist. Something inside is still on.',
+    prompt:'Hard sci-fi salvage adventure. The player captains a small, indebted salvage ship on the rim of settled space. They have just docked with a derelict military vessel missing for 80 years — its reactor is warm, and its logs are wrong.' },
+  { id:'hollow',  emoji:'🕯️', genre:'Horror', title:'The Hollow House',
+    blurb:'You inherited a house from an aunt you never met. The locals will not walk past its gate.',
+    prompt:'Slow-burn gothic horror. The player has inherited an old rural house from an unknown aunt. The town is unwelcoming, the house has too many locked doors, and every night something rearranges the furniture. Build dread gradually; supernatural threat is real.' },
+  { id:'isekai',  emoji:'✨', genre:'Isekai', title:'Second Chance World',
+    blurb:'Hit by the proverbial truck, you wake in a fantasy world with one strange, underpowered blessing.',
+    prompt:'Comedic-but-earnest isekai. The player has died mundanely on Earth and been reincarnated in a fantasy kingdom with a seemingly useless blessing chosen by the GM (let it turn out to be secretly powerful in creative situations). Guilds, adventurers, a demon lord rumor.' },
+  { id:'tycoon',  emoji:'🏙️', genre:'Strategy · Modern', title:'Urban Tycoon',
+    blurb:'Start with a food cart and a rival with deep pockets. Build a business empire block by block.',
+    prompt:'A modern-day business simulation story. The player starts with $5,000, one food cart in a big city, and ambition. Track money, reputation, and staff informally in the narration. Rivals, permits, health inspectors, and lucky breaks. Numbers and tradeoffs matter.' },
+  { id:'hearth',  emoji:'🍵', genre:'Cozy Fantasy', title:'Hearth & Hexes',
+    blurb:'Run a little potion shop in a valley town where the worst danger is gossip. Mostly.',
+    prompt:'Cozy low-stakes fantasy slice-of-life. The player has just opened a small potion-and-tea shop in a friendly valley town of humans, gnomes, and the occasional polite ghost. Focus on charming characters, small mysteries, seasonal festivals, and gentle progress. No combat unless the player really pushes for it.' },
+  { id:'veil',    emoji:'🗝️', genre:'Mystery · Noir', title:'Behind the Veil',
+    blurb:'A 1920s occult detective takes the one case every other investigator turned down.',
+    prompt:'Occult noir mystery set in a 1920s city. The player is a private investigator who can see through minor glamours. A wealthy widow hires them to find her husband — who was seen at his own funeral, three days after it. Clues should be fair and discoverable.' },
+  { id:'crown',   emoji:'⚔️', genre:'Epic Fantasy', title:'The Broken Crown',
+    blurb:'The king is dead, the crown is shattered into five shards, and every faction wants you dead or hired.',
+    prompt:'Epic high-fantasy war-and-politics campaign. The old king is dead and his enchanted crown broke into five shards scattered across the realm. The player begins as a minor noble\'s bastard with one shard sewn into their cloak. Factions, battles, intrigue, hard choices.' },
+];
+
+/* ================= state & storage ================= */
+const LS = { key:'qf_api_key', model:'qf_model', saves:'qf_saves' };
+// localStorage can throw (private mode, sandboxed contexts) — fall back to in-memory
+const store = (() => {
+  try { localStorage.setItem('qf_test','1'); localStorage.removeItem('qf_test'); return localStorage; }
+  catch { const m = {}; return { getItem:k => m[k] ?? null, setItem:(k,v) => { m[k]=v; }, removeItem:k => { delete m[k]; } }; }
+})();
+let game = null;          // { id, title, systemPrompt, messages:[{role, content}], updated }
+let mode = 'do';
+let streaming = false;
+
+const getKey   = () => store.getItem(LS.key) || '';
+const getModel = () => store.getItem(LS.model) || 'claude-opus-5';
+const getSaves = () => JSON.parse(store.getItem(LS.saves) || '{}');
+const putSave  = g => { const s = getSaves(); s[g.id] = g; store.setItem(LS.saves, JSON.stringify(s)); };
+const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
+
+/* ================= GM system prompt ================= */
+function buildSystemPrompt(scenario, tone) {
+  return `You are the Game Master of an interactive text adventure. You run the world; the player controls only their own character.
+
+Scenario: ${scenario}
+${tone ? `Tone: ${tone}` : ''}
+
+Rules of play:
+- Write vivid second-person narration ("you"). Keep each response to 2–4 short paragraphs, then stop at a natural decision point. Never write the player's actions, choices, or dialogue for them.
+- The world is persistent and consistent. NPCs have their own goals and memories. Actions have consequences that carry forward.
+- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in).
+- Player actions can fail. Judge success by plausibility, established abilities, and dramatic stakes — bold risky moves should sometimes go wrong in interesting ways. Never let failure be a dead end.
+- If the player attempts something impossible or tries to dictate outcomes for NPCs or the world in a [DO]/[SAY] input, narrate the attempt failing or being reinterpreted plausibly.
+- Introduce concrete details: names, sensory description, and occasional dialogue from NPCs.
+- Track the player's items, injuries, relationships, and goals implicitly and keep them consistent.
+- End most responses with the situation open — a question, a threat, a choice — but do not literally list options unless the player asks.
+
+Begin the adventure now with an opening scene that establishes the character, the setting, and an immediate hook. 3–5 paragraphs for this first scene only.`;
+}
+
+/* ================= views ================= */
+function goHome() {
+  if (streaming) return;
+  game = null;
+  document.getElementById('view-play').classList.add('hidden');
+  document.getElementById('view-home').classList.remove('hidden');
+  document.getElementById('btn-home').classList.add('hidden');
+  renderHome();
+}
+
+function renderHome() {
+  document.getElementById('key-banner').classList.toggle('hidden', !!getKey());
+
+  const grid = document.getElementById('adventure-grid');
+  grid.innerHTML = '';
+  const custom = document.createElement('div');
+  custom.className = 'card custom';
+  custom.innerHTML = '<div class="emoji">✒️</div><h3>Custom Adventure</h3><p>Build your own world from scratch</p>';
+  custom.onclick = () => document.getElementById('custom-modal').classList.remove('hidden');
+  grid.appendChild(custom);
+  for (const a of ADVENTURES) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `<div class="emoji">${a.emoji}</div><div class="genre">${a.genre}</div><h3>${a.title}</h3><p>${a.blurb}</p>`;
+    el.onclick = () => startAdventure(a.title, a.prompt, null);
+    grid.appendChild(el);
+  }
+
+  const saves = Object.values(getSaves()).sort((a,b) => b.updated - a.updated);
+  document.getElementById('saves-section').classList.toggle('hidden', saves.length === 0);
+  const list = document.getElementById('saves-list');
+  list.innerHTML = '';
+  for (const s of saves) {
+    const row = document.createElement('div');
+    row.className = 'save-row';
+    const turns = s.messages.filter(m => m.role === 'user').length;
+    row.innerHTML = `<div class="meta"><div class="title">${escapeHtml(s.title)}</div>
+      <div class="sub">${turns} turn${turns===1?'':'s'} · ${new Date(s.updated).toLocaleString()}</div></div>`;
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const cont = document.createElement('button'); cont.className='primary'; cont.textContent='Continue';
+    cont.onclick = () => resumeGame(s.id);
+    const del = document.createElement('button'); del.className='danger'; del.textContent='Delete';
+    del.onclick = () => { if (confirm('Delete this save?')) delSave(s.id); };
+    actions.append(cont, del);
+    row.appendChild(actions);
+    list.appendChild(row);
+  }
+}
+
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function showPlay() {
+  document.getElementById('view-home').classList.add('hidden');
+  document.getElementById('view-play').classList.remove('hidden');
+  document.getElementById('btn-home').classList.remove('hidden');
+}
+
+function renderStory() {
+  const box = document.getElementById('story');
+  box.innerHTML = '';
+  for (const m of game.messages) {
+    if (m.role === 'user' && m.content === '[STORY] Begin the adventure.') continue;
+    const div = document.createElement('div');
+    if (m.role === 'assistant') { div.className = 'turn gm'; div.textContent = m.content; }
+    else { div.className = 'turn player'; div.textContent = m.content.replace(/^\[(DO|SAY|STORY)\]\s*/, ''); }
+    box.appendChild(div);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ================= game flow ================= */
+function startAdventure(title, scenario, tone) {
+  if (!requireKey()) return;
+  game = {
+    id: 'g' + Date.now(),
+    title,
+    systemPrompt: buildSystemPrompt(scenario, tone),
+    messages: [],
+    updated: Date.now(),
+  };
+  showPlay();
+  renderStory();
+  // kick off with an opening-scene request
+  runGM([{ role: 'user', content: '[STORY] Begin the adventure.' }], true);
+}
+
+function startCustom() {
+  const setting = document.getElementById('c-setting').value.trim();
+  const character = document.getElementById('c-character').value.trim();
+  const tone = document.getElementById('c-tone').value;
+  const quest = document.getElementById('c-quest').value.trim();
+  closeCustom();
+  const scenario = [
+    setting ? `World: ${setting}` : 'World: GM\'s choice — invent something compelling.',
+    character ? `Player character: ${character}` : 'Player character: GM\'s choice, introduced in the opening scene.',
+    quest ? `Opening goal: ${quest}` : '',
+  ].filter(Boolean).join('\n');
+  startAdventure(setting ? setting.slice(0, 40) : 'Custom Adventure', scenario, tone);
+}
+
+function resumeGame(id) {
+  if (!requireKey()) return;
+  game = getSaves()[id];
+  showPlay();
+  renderStory();
+}
+
+function requireKey() {
+  if (getKey()) return true;
+  openSettings();
+  return false;
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  const ph = { do: 'What do you do?', say: 'What do you say?', story: 'Add to the story...' };
+  document.getElementById('player-input').placeholder = ph[m];
+}
+
+function sendTurn() {
+  if (streaming || !game) return;
+  const input = document.getElementById('player-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const tagged = `[${mode.toUpperCase()}] ${text}`;
+  runGM([{ role: 'user', content: tagged }], false);
+}
+
+/* ================= Claude API (streaming) ================= */
+async function runGM(newMessages, isOpening) {
+  streaming = true;
+  document.getElementById('send-btn').disabled = true;
+
+  game.messages.push(...newMessages);
+  renderStory();
+
+  const box = document.getElementById('story');
+  const gmDiv = document.createElement('div');
+  gmDiv.className = 'turn gm';
+  gmDiv.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
+  box.appendChild(gmDiv);
+  box.scrollTop = box.scrollHeight;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': getKey(),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        max_tokens: 2048,
+        stream: true,
+        output_config: { effort: 'low' },
+        system: [{ type: 'text', text: game.systemPrompt, cache_control: { type: 'ephemeral' } }],
+        messages: game.messages,
+      }),
+    });
+
+    if (!resp.ok) {
+      let msg = `API error (${resp.status})`;
+      try { msg += ': ' + (await resp.json()).error.message; } catch {}
+      throw new Error(msg);
+    }
+
+    // parse SSE stream
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', fullText = '', started = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          if (!started) { gmDiv.textContent = ''; started = true; }
+          fullText += ev.delta.text;
+          gmDiv.textContent = fullText;
+          box.scrollTop = box.scrollHeight;
+        } else if (ev.type === 'message_delta' && ev.delta?.stop_reason === 'refusal') {
+          throw new Error('The model declined to continue this scene. Try a different action.');
+        } else if (ev.type === 'error') {
+          throw new Error(ev.error?.message || 'Stream error');
+        }
+      }
+    }
+
+    if (!fullText) throw new Error('Empty response from the Game Master.');
+    game.messages.push({ role: 'assistant', content: fullText });
+    game.updated = Date.now();
+    putSave(game);
+  } catch (err) {
+    gmDiv.className = 'turn error';
+    gmDiv.textContent = err.message;
+    // roll back the player turn so it can be retried
+    game.messages = game.messages.slice(0, game.messages.length - newMessages.length);
+    if (isOpening) { setTimeout(goHomeForce, 0); }
+  } finally {
+    streaming = false;
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('player-input').focus();
+  }
+}
+
+function goHomeForce() { /* keep error visible; user can navigate back via Library */ }
+
+/* ================= settings & modals ================= */
+function openSettings() {
+  document.getElementById('set-key').value = getKey();
+  document.getElementById('set-model').value = getModel();
+  document.getElementById('settings-modal').classList.remove('hidden');
+}
+function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
+function saveSettings() {
+  store.setItem(LS.key, document.getElementById('set-key').value.trim());
+  store.setItem(LS.model, document.getElementById('set-model').value);
+  closeSettings();
+  renderHome();
+}
+function closeCustom() { document.getElementById('custom-modal').classList.add('hidden'); }
+
+/* close modals on backdrop click */
+document.querySelectorAll('.modal-backdrop').forEach(b => {
+  b.addEventListener('click', e => { if (e.target === b) b.classList.add('hidden'); });
+});
+
+renderHome();
+
+/* PWA: register service worker (requires https or localhost) */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
