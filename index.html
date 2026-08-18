@@ -311,8 +311,11 @@
     <h2>📜 This game</h2>
     <label>Usage &amp; cost</label>
     <pre id="sheet-usage" style="white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; line-height:1.65; margin-top:10px; color:var(--text-dim);"></pre>
+    <label>Story so far</label>
+    <p class="hint">Permanent record of completed scenes — written once, never overwritten.</p>
+    <pre id="sheet-chronicle" style="white-space:pre-wrap; font-family:var(--sans); font-size:13.5px; line-height:1.6; margin-top:10px; color:var(--text-dim); max-height:220px; overflow-y:auto;"></pre>
     <label>Character sheet</label>
-    <p class="hint">Maintained by the Scribe after each turn — the story's canonical record.</p>
+    <p class="hint">Current state, refreshed by the Scribe each turn.</p>
     <pre id="sheet-body" style="white-space:pre-wrap; font-family:var(--sans); font-size:14px; line-height:1.6; margin-top:10px; color:var(--text);"></pre>
     <label>Game prompt</label>
     <p class="hint">The ruleset your Game Master follows. Edit it to change how this game plays from the next turn onward.</p>
@@ -612,10 +615,20 @@ function usageReport(g) {
   return rows.join('\n');
 }
 
+function memoryHealth(g) {
+  if (!g) return '';
+  const behind = g.stateAt != null ? g.messages.length - g.stateAt : null;
+  if ((g.scribeFails || 0) >= 2) return `\n\n⚠️ The Scribe has failed ${g.scribeFails} times running — this record is stale, and with older scenes out of the transcript the Game Master may forget recent events. Check your connection or API credits.`;
+  if (behind != null && behind > 6) return `\n\n⚠️ This record is ${behind} messages behind the story.`;
+  return '';
+}
+
 function openSheet() {
   document.getElementById('sheet-usage').textContent = usageReport(game);
+  const chron = (game?.chronicle || []).map(e => '• ' + e.text).join('\n');
+  document.getElementById('sheet-chronicle').textContent = chron || 'No completed scenes recorded yet.';
   document.getElementById('sheet-body').textContent =
-    game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.';
+    (game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.') + memoryHealth(game);
   // older saves have no stored scenario; fall back to the full system prompt
   document.getElementById('sheet-scenario').value = game?.scenario || game?.systemPrompt || '';
   document.getElementById('sheet-modal').classList.remove('hidden');
@@ -950,11 +963,39 @@ function windowMessages(g) {
    system prompt stays byte-stable and cacheable. */
 function contextBlock(g) {
   let t = '';
-  if (g.state) t += `CANONICAL GAME STATE — the authoritative record of established facts (it may lag one turn behind). Never contradict it; rely on it rather than re-inferring facts from old scenes:\n${g.state}`;
+  const chron = chronicleText(g);
+  if (chron) t += `STORY SO FAR — an append-only record of completed scenes and arcs, oldest first. This is durable history; treat every entry as canon:\n${chron}`;
+  if (g.state) t += `${t ? '\n\n' : ''}CANONICAL GAME STATE — the authoritative snapshot of current facts (it may lag one turn behind). Never contradict it; rely on it rather than re-inferring facts from old scenes:\n${g.state}`;
   if (g.director?.brief) t += `${t ? '\n\n' : ''}SECRET STORY PLAN from the Story Director. Steer toward these beats at a natural pace, adapting freely when the player surprises you. Never reveal, quote, or hint that a plan exists:\n${g.director.brief}`;
-  if (g.messages.length > WINDOW) t += `${t ? '\n\n' : ''}NOTE: earlier scenes are omitted from this transcript. The state sheet above is the authoritative record of everything that happened in them.`;
+  if (g.messages.length > WINDOW) t += `${t ? '\n\n' : ''}NOTE: earlier scenes are omitted from this transcript. The records above are the authoritative account of everything that happened in them.`;
   return t ? `<engine-context>\n${t}\n</engine-context>\n(Engine context for the Game Master — not a message from the player. Do not acknowledge it.)` : '';
 }
+
+/* ---- durable history ----
+   The state sheet is rewritten every turn, so anything it drops is lost once the
+   transcript window slides past it. The chronicle is append-only: completed scenes
+   are recorded once and never rewritten, so history accumulates instead of decaying. */
+const CHRONICLE_MAX = 60;
+
+function addChronicle(g, entry) {
+  const text = String(entry || '').trim();
+  if (!text) return;
+  const list = g.chronicle || (g.chronicle = []);
+  if (list.some(e => e.text === text)) return;            // ignore repeats
+  list.push({ at: g.messages.length, text });
+  if (list.length > CHRONICLE_MAX) {
+    // keep the origin arc and the recent run; drop from the middle, marking the gap
+    const keepHead = 8, keepTail = CHRONICLE_MAX - keepHead - 1;
+    const dropped = list.length - keepHead - keepTail;
+    g.chronicle = [
+      ...list.slice(0, keepHead),
+      { at: list[keepHead].at, text: `(${dropped} earlier entries condensed away — the state sheet carries their lasting consequences.)` },
+      ...list.slice(-keepTail),
+    ];
+  }
+}
+
+const chronicleText = g => (g.chronicle || []).map(e => '- ' + e.text).join('\n');
 
 /* ---- canonical state: a scribe model keeps the character sheet & world facts ---- */
 function transcriptOf(messages, maxChars) {
@@ -969,26 +1010,41 @@ async function updateState(g) {
   if (g._stateUpdating) return;
   g._stateUpdating = true;
   try {
-    const transcript = transcriptOf(g.messages.slice(-6), 9000);
+    // match the narrator's window: anything the Scribe can't see is unrecoverable
+    const transcript = transcriptOf(windowMessages(g), 14000);
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: apiHeaders(),
       body: JSON.stringify({
         model: 'claude-haiku-4-5',
         max_tokens: 1500,
-        system: 'You are the Scribe for a text adventure game. You maintain its canonical state sheet. Output ONLY the full updated sheet with exactly these sections: CHARACTER / STATS & ABILITIES / INVENTORY / CONDITIONS / RELATIONSHIPS / GOALS & QUESTS / WORLD FACTS / RECENT EVENTS (3-5 bullets on the latest scenes), then end with exactly one line: "NEXT PROMPT: open" or "NEXT PROMPT: choice" plus a 4-8 word reason. Recommend "choice" ONLY when the story is arriving at a genuine branch point — an irreversible decision, a scene closing onto several distinct paths, a crossroads the player must commit to; otherwise recommend "open". Most turns should be "open". Rules for the sheet: record only facts established in play — never invent; update values that changed; drop resolved or obsolete entries; keep the whole sheet under 450 words.',
+        system: `You are the Scribe for a text adventure game. You keep two records.
+
+1. THE STATE SHEET — a snapshot of how things stand right now. Output it first, with exactly these sections: CHARACTER / STATS & ABILITIES / INVENTORY / CONDITIONS / RELATIONSHIPS / GOALS & QUESTS / WORLD FACTS. Record only facts established in play — never invent; update values that changed; drop resolved or obsolete entries; keep it under 450 words.
+
+2. THE CHRONICLE — permanent history. If, and only if, a scene or arc CONCLUDED in the latest scenes (a fight resolved, a technique gained, a secret revealed, a bargain struck, someone died, a place left behind), append one line at the very end of your output, formatted exactly:
+CHRONICLE+: <one sentence, past tense, naming who and what changed>
+Emit at most one such line, and none at all if the latest scenes were mid-scene or inconsequential. Never repeat an event already listed in the chronicle you were given.
+
+Then end with exactly one line: "NEXT PROMPT: open" or "NEXT PROMPT: choice" plus a 4-8 word reason. Recommend "choice" ONLY when the story is arriving at a genuine branch point — an irreversible decision, a scene closing onto several distinct paths, a crossroads the player must commit to; otherwise recommend "open". Most turns should be "open".`,
         messages: [{
           role: 'user',
-          content: `Current state sheet:\n${g.state || '(none yet — create the first sheet from the scenes below)'}\n\nLatest scenes:\n${transcript}\n\nOutput the full updated state sheet.`,
+          content: `Chronicle so far:\n${chronicleText(g) || '(empty)'}\n\nCurrent state sheet:\n${g.state || '(none yet — create the first sheet from the scenes below)'}\n\nLatest scenes:\n${transcript}\n\nOutput the updated state sheet, then any CHRONICLE+ line, then the NEXT PROMPT line.`,
         }],
       }),
     });
-    if (!resp.ok) return;
+    if (!resp.ok) { g.scribeFails = (g.scribeFails || 0) + 1; return; }
     const data = await resp.json();
     addUsage(g, 'scribe', 'claude-haiku-4-5', data.usage);
-    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
-    if (text) { g.state = text; putSave(g); }
-  } catch { /* non-fatal: sheet lags a turn */ }
+    let text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (!text) { g.scribeFails = (g.scribeFails || 0) + 1; return; }
+    // pull any CHRONICLE+ line out of the sheet and append it permanently
+    text = text.replace(/^\s*CHRONICLE\+:\s*(.+)$/gim, (_, entry) => { addChronicle(g, entry); return ''; }).trim();
+    g.state = text;
+    g.scribeFails = 0;
+    g.stateAt = g.messages.length;
+    putSave(g);
+  } catch { g.scribeFails = (g.scribeFails || 0) + 1; /* non-fatal: sheet lags a turn */ }
   finally { delete g._stateUpdating; }
 }
 
