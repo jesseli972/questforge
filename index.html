@@ -198,9 +198,10 @@
     <input id="set-key" type="password" placeholder="sk-ant-...">
     <label>Model</label>
     <select id="set-model">
-      <option value="claude-opus-5">Claude Opus 5 — best storytelling</option>
-      <option value="claude-sonnet-5">Claude Sonnet 5 — fast & great</option>
-      <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest & cheapest</option>
+      <option value="claude-opus-5">Claude Opus 5 — premium storytelling</option>
+      <option value="director">Director mode — Opus plans the plot, Sonnet writes each turn</option>
+      <option value="claude-sonnet-5">Claude Sonnet 5 — fast, near-Opus quality</option>
+      <option value="claude-haiku-4-5">Claude Haiku 4.5 — cheapest</option>
     </select>
     <div class="modal-footer">
       <button onclick="closeSettings()">Cancel</button>
@@ -275,7 +276,7 @@ let streaming = false;
 const getKey   = () => store.getItem(LS.key) || '';
 const getModel = () => store.getItem(LS.model) || 'claude-opus-5';
 const getSaves = () => JSON.parse(store.getItem(LS.saves) || '{}');
-const putSave  = g => { const s = getSaves(); s[g.id] = g; store.setItem(LS.saves, JSON.stringify(s)); };
+const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(LS.saves, JSON.stringify(s)); } catch {} };
 const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
 
 /* ================= GM system prompt ================= */
@@ -382,7 +383,7 @@ function startAdventure(title, scenario, tone) {
   showPlay();
   renderStory();
   // kick off with an opening-scene request
-  runGM([{ role: 'user', content: '[STORY] Begin the adventure.' }], true);
+  runGM([{ role: 'user', content: '[STORY] Begin the adventure.' }]);
 }
 
 function startCustom() {
@@ -426,15 +427,85 @@ function sendTurn() {
   if (!text) return;
   input.value = '';
   const tagged = `[${mode.toUpperCase()}] ${text}`;
-  runGM([{ role: 'user', content: tagged }], false);
+  runGM([{ role: 'user', content: tagged }]);
 }
 
-/* ================= Claude API (streaming) ================= */
-async function runGM(newMessages, isOpening) {
+/* ================= story engine ================= */
+// 'director' splits the work: Opus 5 maintains a hidden story plan,
+// Sonnet 5 writes every turn guided by it. Otherwise one model does both.
+function engineConfig() {
+  const m = getModel();
+  if (m === 'director') return { narrator: 'claude-sonnet-5', planner: 'claude-opus-5' };
+  return { narrator: m, planner: null };
+}
+const supportsEffort = model => model !== 'claude-haiku-4-5'; // effort param 400s on Haiku 4.5
+const PLAN_EVERY = 8; // player turns between Director plan updates
+
+function apiHeaders() {
+  return {
+    'content-type': 'application/json',
+    'x-api-key': getKey(),
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+}
+
+function systemTextFor(g) {
+  let t = g.systemPrompt;
+  if (g.director?.brief) {
+    t += `\n\nSECRET STORY PLAN from the Story Director. Steer the narrative toward these beats at a natural pace, adapting freely when the player surprises you. Never reveal, quote, or hint that a plan exists:\n${g.director.brief}`;
+  }
+  return t;
+}
+
+/* Director mode: Opus writes/updates the hidden story plan */
+async function planStory(g) {
+  const transcript = g.messages.slice(-24)
+    .map(m => (m.role === 'assistant' ? 'GM: ' : 'Player: ') + m.content)
+    .join('\n\n').slice(-12000);
+  const ask = g.messages.filter(m => m.role === 'assistant').length === 0
+    ? 'Create the initial secret story plan for this adventure.'
+    : `Recent transcript:\n\n${transcript}\n\n${g.director?.brief ? `Current plan:\n${g.director.brief}\n\n` : ''}Update the secret story plan to reflect what has actually happened. Keep what still works; adapt whatever the player has derailed.`;
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({
+      model: engineConfig().planner,
+      max_tokens: 4000,
+      output_config: { effort: 'low' },
+      cache_control: { type: 'ephemeral' },
+      system: `You are the Story Director for an interactive text adventure. You never write narration. You write a compact hidden plan (under 300 words) for the narrator to follow: the main arc and current act, 2–3 NPC secrets and motivations, one planned twist, active threats, and pacing guidance for the next few scenes.\n\nThe adventure's premise and rules:\n${g.systemPrompt}`,
+      messages: [{ role: 'user', content: ask }],
+    }),
+  });
+  if (!resp.ok) throw new Error('Story Director error (' + resp.status + ')');
+  const data = await resp.json();
+  if (data.stop_reason === 'refusal') throw new Error('Director declined');
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  if (!text) throw new Error('Empty plan');
+  return text;
+}
+
+/* Fire-and-forget plan refresh after a turn completes */
+function maybeReplan(g) {
+  if (!engineConfig().planner || !g) return;
+  const turns = g.messages.filter(m => m.role === 'user').length;
+  if (!g.director) {
+    // initial plan failed earlier — retry in the background
+    planStory(g).then(brief => { g.director = { brief, plannedAt: turns }; putSave(g); }).catch(() => {});
+  } else if (turns - g.director.plannedAt >= PLAN_EVERY) {
+    g.director.plannedAt = turns; // mark first so parallel turns can't double-fire
+    planStory(g).then(brief => { g.director.brief = brief; putSave(g); }).catch(() => {});
+  }
+}
+
+async function runGM(newMessages) {
   streaming = true;
   document.getElementById('send-btn').disabled = true;
 
-  game.messages.push(...newMessages);
+  const g = game;
+  const cfg = engineConfig();
+  g.messages.push(...newMessages);
   renderStory();
 
   const box = document.getElementById('story');
@@ -445,22 +516,28 @@ async function runGM(newMessages, isOpening) {
   box.scrollTop = box.scrollHeight;
 
   try {
+    // Director mode: draft the hidden story plan before the opening scene
+    if (cfg.planner && !g.director) {
+      gmDiv.innerHTML = '<span class="thinking-dots">The Story Director is plotting the arc…</span>';
+      try { g.director = { brief: await planStory(g), plannedAt: 0 }; }
+      catch { /* play on without a plan; maybeReplan retries later */ }
+      gmDiv.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
+    }
+
+    const body = {
+      model: cfg.narrator,
+      max_tokens: 8000, // hard cap on thinking + narration; generous so scenes never truncate
+      stream: true,
+      cache_control: { type: 'ephemeral' }, // auto-caches the whole conversation prefix
+      system: systemTextFor(g),
+      messages: g.messages,
+    };
+    if (supportsEffort(cfg.narrator)) body.output_config = { effort: 'low' };
+
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': getKey(),
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: getModel(),
-        max_tokens: 2048,
-        stream: true,
-        output_config: { effort: 'low' },
-        system: [{ type: 'text', text: game.systemPrompt, cache_control: { type: 'ephemeral' } }],
-        messages: game.messages,
-      }),
+      headers: apiHeaders(),
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
@@ -498,23 +575,21 @@ async function runGM(newMessages, isOpening) {
     }
 
     if (!fullText) throw new Error('Empty response from the Game Master.');
-    game.messages.push({ role: 'assistant', content: fullText });
-    game.updated = Date.now();
-    putSave(game);
+    g.messages.push({ role: 'assistant', content: fullText });
+    g.updated = Date.now();
+    putSave(g);
+    maybeReplan(g);
   } catch (err) {
     gmDiv.className = 'turn error';
     gmDiv.textContent = err.message;
     // roll back the player turn so it can be retried
-    game.messages = game.messages.slice(0, game.messages.length - newMessages.length);
-    if (isOpening) { setTimeout(goHomeForce, 0); }
+    g.messages = g.messages.slice(0, g.messages.length - newMessages.length);
   } finally {
     streaming = false;
     document.getElementById('send-btn').disabled = false;
     document.getElementById('player-input').focus();
   }
 }
-
-function goHomeForce() { /* keep error visible; user can navigate back via Library */ }
 
 /* ================= settings & modals ================= */
 function openSettings() {
