@@ -298,6 +298,14 @@
       <option value="lucky">Lucky — roll twice, keep the better</option>
       <option value="blessed">Blessed — roll three times, keep the best</option>
     </select>
+    <label>Backup</label>
+    <p class="hint">Your games live only in this browser's storage — clearing website data or leaving the app unopened for a couple of weeks can wipe them. Export writes every save to a file you can keep in Files or iCloud. Your API key is never included.</p>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button onclick="exportSaves()" style="flex:1">⬇ Export games</button>
+      <button onclick="document.getElementById('import-file').click()" style="flex:1">⬆ Import</button>
+    </div>
+    <input id="import-file" type="file" accept="application/json,.json" class="hidden" onchange="importSaves(this)">
+    <p id="backup-status" class="hint hidden" style="margin-top:10px;"></p>
     <div class="modal-footer">
       <button onclick="closeSettings()">Cancel</button>
       <button class="primary" onclick="saveSettings()">Save</button>
@@ -615,6 +623,13 @@ function usageReport(g) {
   return rows.join('\n');
 }
 
+function backupNudge(g) {
+  if (!g || g.messages.length < 30) return '';
+  const turns = g.messages.filter(m => m.role === 'user').length;
+  if (g.exportedAt && g.exportedAt > (g.updated || 0) - 3.6e6) return '';
+  return `\n\n💾 ${turns} turns in and never backed up. Settings → Export games keeps this campaign safe from a cleared cache.`;
+}
+
 function memoryHealth(g) {
   if (!g) return '';
   const behind = g.stateAt != null ? g.messages.length - g.stateAt : null;
@@ -628,7 +643,7 @@ function openSheet() {
   const chron = (game?.chronicle || []).map(e => '• ' + e.text).join('\n');
   document.getElementById('sheet-chronicle').textContent = chron || 'No completed scenes recorded yet.';
   document.getElementById('sheet-body').textContent =
-    (game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.') + memoryHealth(game);
+    (game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.') + memoryHealth(game) + backupNudge(game);
   // older saves have no stored scenario; fall back to the full system prompt
   document.getElementById('sheet-scenario').value = game?.scenario || game?.systemPrompt || '';
   document.getElementById('sheet-modal').classList.remove('hidden');
@@ -1355,6 +1370,83 @@ function openSettings() {
   document.getElementById('set-luck').value = getLuck();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
+/* ---- backup: export / import saves ----
+   Saves live in one browser's localStorage, which iOS evicts from unopened web
+   apps and clearing website data wipes. These give the player a real backup and
+   a way to move a campaign between devices. The API key is deliberately excluded. */
+const BACKUP_VERSION = 1;
+
+function backupStatus(msg, bad) {
+  const el = document.getElementById('backup-status');
+  el.textContent = msg;
+  el.style.color = bad ? 'var(--danger)' : 'var(--accent)';
+  el.classList.remove('hidden');
+}
+
+function exportSaves() {
+  const saves = getSaves();
+  const games = Object.values(saves);
+  if (!games.length) { backupStatus('No saved games to export yet.', true); return; }
+  const payload = {
+    app: 'questforge', version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    settings: {                       // preferences travel; the API key never does
+      model: getModel(), effort: getEffort(), luck: getLuck(),
+      karmic: getKarmic() ? '1' : '0', size: getSize(), font: getFont(),
+    },
+    games: saves,
+  };
+  const stamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `questforge-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  for (const g of games) { g.exportedAt = Date.now(); putSave(g); }
+  backupStatus(`Exported ${games.length} game${games.length === 1 ? '' : 's'}.`);
+}
+
+function importSaves(input) {
+  const file = input.files && input.files[0];
+  input.value = '';                              // allow re-picking the same file
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); }
+    catch { backupStatus('That file isn\'t valid JSON.', true); return; }
+    if (!data || data.app !== 'questforge' || !data.games || typeof data.games !== 'object') {
+      backupStatus('That doesn\'t look like a QuestForge backup.', true); return;
+    }
+    const incoming = Object.values(data.games).filter(g => g && g.id && Array.isArray(g.messages));
+    if (!incoming.length) { backupStatus('No games found in that file.', true); return; }
+    const existing = getSaves();
+    let added = 0, updated = 0, skipped = 0;
+    for (const g of incoming) {
+      const mine = existing[g.id];
+      if (!mine) { existing[g.id] = g; added++; }
+      else if ((g.updated || 0) > (mine.updated || 0)) { existing[g.id] = g; updated++; }   // newer wins
+      else skipped++;
+    }
+    try { store.setItem(LS.saves, JSON.stringify(existing)); }
+    catch { backupStatus('Not enough browser storage to import these games.', true); return; }
+    // restore preferences only where nothing is set locally
+    const s = data.settings || {};
+    const maybe = (key, val) => { if (val != null && store.getItem(key) == null) store.setItem(key, String(val)); };
+    maybe('qf_model', s.model); maybe('qf_effort', s.effort); maybe('qf_luck', s.luck);
+    maybe('qf_karmic', s.karmic); maybe('qf_size2', s.size); maybe('qf_font', s.font);
+    applyPrefs();
+    renderHome();
+    backupStatus(`Imported: ${added} new, ${updated} updated${skipped ? `, ${skipped} already current` : ''}.`);
+  };
+  reader.onerror = () => backupStatus('Could not read that file.', true);
+  reader.readAsText(file);
+}
+
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 function saveSettings() {
   store.setItem(LS.key, cleanKey(document.getElementById('set-key').value));
