@@ -164,6 +164,7 @@
   .mode-row { display: flex; gap: 6px; margin-bottom: 8px; }
   .mode-btn { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
   .mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .turn.player.skip { font-style: normal; color: var(--accent); border-left-style: dashed; }
 
   .dice {
     display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 2px;
@@ -243,6 +244,7 @@
       <button class="mode-btn active" data-mode="do" onclick="setMode('do')">Do</button>
       <button class="mode-btn" data-mode="say" onclick="setMode('say')">Say</button>
       <button class="mode-btn" data-mode="story" onclick="setMode('story')">Story</button>
+      <button class="mode-btn" data-mode="skip" onclick="setMode('skip')">⏩ Skip</button>
     </div>
     <div class="composer-inner">
       <textarea id="player-input" rows="1" placeholder="What do you do?"
@@ -293,11 +295,16 @@
 <!-- ============ SHEET MODAL ============ -->
 <div id="sheet-modal" class="modal-backdrop hidden">
   <div class="modal">
-    <h2>📜 Character Sheet</h2>
-    <p class="hint">Maintained automatically by the Scribe after each turn — the story's canonical record.</p>
-    <pre id="sheet-body" style="white-space:pre-wrap; font-family:var(--sans); font-size:14px; line-height:1.6; margin-top:14px; color:var(--text);"></pre>
+    <h2>📜 This game</h2>
+    <label>Character sheet</label>
+    <p class="hint">Maintained by the Scribe after each turn — the story's canonical record.</p>
+    <pre id="sheet-body" style="white-space:pre-wrap; font-family:var(--sans); font-size:14px; line-height:1.6; margin-top:10px; color:var(--text);"></pre>
+    <label>Game prompt</label>
+    <p class="hint">The ruleset your Game Master follows. Edit it to change how this game plays from the next turn onward.</p>
+    <textarea id="sheet-scenario" rows="9" style="margin-top:10px; font-size:13px; line-height:1.5;"></textarea>
     <div class="modal-footer">
-      <button class="primary" onclick="document.getElementById('sheet-modal').classList.add('hidden')">Close</button>
+      <button onclick="document.getElementById('sheet-modal').classList.add('hidden')">Close</button>
+      <button class="primary" onclick="saveGamePrompt()">Save prompt</button>
     </div>
   </div>
 </div>
@@ -305,22 +312,36 @@
 <!-- ============ CUSTOM ADVENTURE MODAL ============ -->
 <div id="custom-modal" class="modal-backdrop hidden">
   <div class="modal">
-    <h2>Custom adventure</h2>
-    <p class="hint">Describe the world you want. The Game Master fills in everything you leave blank.</p>
-    <label>Setting / world</label>
-    <textarea id="c-setting" rows="2" placeholder="A rain-soaked cyberpunk megacity ruled by rival AI cartels..."></textarea>
-    <label>Your character</label>
-    <textarea id="c-character" rows="2" placeholder="A washed-up courier with a stolen prototype implant..."></textarea>
-    <label>Tone</label>
+    <h2>Design a game</h2>
+    <p class="hint">Write anything — a sentence, or a full design document with world, factions, mechanics and stat panels. A Game Designer AI reads it and compiles a specialized ruleset for your Game Master.</p>
+    <label>Game title</label>
+    <input id="c-title" placeholder="Ashfall Protocol">
+    <label>Start from an existing game (optional)</label>
+    <select id="c-preset" onchange="loadPreset(this.value)">
+      <option value="">Blank — write my own</option>
+    </select>
+    <label>Game description</label>
+    <textarea id="c-brief" rows="9" placeholder="## Overview
+A rain-soaked cyberpunk megacity ruled by rival AI cartels.
+
+## Player Character
+A washed-up courier carrying a stolen prototype implant.
+
+## Mechanics
+Track Heat (police attention) and Cred. Show a status readout every turn.
+
+## Tone
+Noir, tense, morally grey. Fast pacing."></textarea>
+    <label>Tone (optional)</label>
     <select id="c-tone">
+      <option value="">Let the description decide</option>
       <option>Adventurous</option><option>Dark & gritty</option><option>Lighthearted & funny</option>
       <option>Mysterious</option><option>Epic & dramatic</option><option>Cozy & relaxing</option>
     </select>
-    <label>Opening quest or goal (optional)</label>
-    <input id="c-quest" placeholder="Find out who framed you for the senator's murder">
+    <p id="c-status" class="hint hidden" style="margin-top:14px; color:var(--accent);"></p>
     <div class="modal-footer">
       <button onclick="closeCustom()">Cancel</button>
-      <button class="primary" onclick="startCustom()">Begin adventure</button>
+      <button class="primary" id="c-go" onclick="startCustom()">Design & begin</button>
     </div>
   </div>
 </div>
@@ -341,7 +362,7 @@ Mechanics to enforce every turn:
 - Use the roll_dice tool for risky actions, with thresholds set from realm gaps and stats; success thresholds scale with Realm progression. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
 - Meditation can trigger time skips of months to decades. The Dragon & Phoenix Festival (geniuses under 20) and the decennial Grand Azure Tournament (ages 20–100) are pivotal events; death in a tournament is a permanent Game Over — announce it and end the story.
 
-Tone: serious, epic, and philosophical. Pacing: very slow — emphasize the passage of years. Difficulty: high — death or permanent injury are common results of recklessness.`,
+Tone: serious, epic, and philosophical. Pacing: deliberate but always moving — a campaign spans years, so compress training, travel, and seclusion into montages and land each scene at a decision rather than narrating day-to-day life. Difficulty: high — death or permanent injury are common results of recklessness.`,
     opening: `# LOG 00 — Prologue
 
 Headlights. A horn. Cold.
@@ -448,6 +469,9 @@ const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(L
 const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
 
 /* ================= GM system prompt ================= */
+const PACING_RULE = `- Pacing: every response must move the story forward — a new development, a consequence, a scene change, or a jump in time. Never restate the situation or stall in place. When an action implies a long stretch of effort (training, travel, waiting, recovery), compress it into a short montage and land at the next meaningful moment rather than narrating it beat by beat.
+- [SKIP] means the player wants to move on. Compress the intervening time — hours, months, or years, whatever fits — into a brief montage of what happened and what changed, then open the next significant scene at a decision point. If they name a target ("until the tournament", "until I reach Core Formation"), advance all the way there, resolving notable setbacks along the way with dice where warranted.`;
+
 const PROMPT_RULE = `- End every response by prompting the player, in one of two styles:
   OPEN (the default — roughly three of every four turns): finish with a single evocative line that invites action — a question, a looming threat, an unresolved moment — with NO listed options.
   CHOICE (only at genuine branch points — irreversible decisions, a scene closing onto several distinct paths, tournament crossroads, or a player who seems stuck): 3–4 numbered options, concrete and meaningfully different, at least one bold or risky, plus a brief note that anything else is allowed. A bare number reply picks that option.
@@ -464,7 +488,8 @@ ${tone ? `Tone: ${tone}` : ''}
 Rules of play:
 - Write vivid second-person narration ("you"). Keep each response to 2–4 short paragraphs (plus any status display the scenario requires), then stop at a natural decision point. Never write the player's actions, choices, or dialogue for them.
 - The world is persistent and consistent. NPCs have their own goals and memories. Actions have consequences that carry forward.
-- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in).
+- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in), [SKIP] is a request to advance time.
+${PACING_RULE}
 - Player actions can fail. Judge success by plausibility, established abilities, and dramatic stakes — bold risky moves should sometimes go wrong in interesting ways. Never let failure be a dead end.
 ${DICE_RULE}
 - If the player attempts something impossible or tries to dictate outcomes for NPCs or the world in a [DO]/[SAY] input, narrate the attempt failing or being reinterpreted plausibly.
@@ -554,7 +579,23 @@ function showPlay() {
 function openSheet() {
   document.getElementById('sheet-body').textContent =
     game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.';
+  // older saves have no stored scenario; fall back to the full system prompt
+  document.getElementById('sheet-scenario').value = game?.scenario || game?.systemPrompt || '';
   document.getElementById('sheet-modal').classList.remove('hidden');
+}
+
+function saveGamePrompt() {
+  if (!game) return;
+  const text = document.getElementById('sheet-scenario').value.trim();
+  if (!text) return;
+  if (game.scenario) {
+    game.scenario = text;
+    game.systemPrompt = buildSystemPrompt(text, game.tone || '', !!game.hasOpening);
+  } else {
+    game.systemPrompt = text;   // legacy save: the field is the whole prompt
+  }
+  putSave(game);
+  document.getElementById('sheet-modal').classList.add('hidden');
 }
 
 function renderStory() {
@@ -583,6 +624,11 @@ function renderStory() {
     }
     const div = document.createElement('div');
     if (m.role === 'assistant') { div.className = 'turn gm'; div.innerHTML = mdToHtml(m.content); }
+    else if (m.content.startsWith('[SKIP]')) {
+      div.className = 'turn player skip';
+      const rest = m.content.slice(6).trim();
+      div.textContent = '⏩ ' + (rest === 'Move the story forward to the next significant scene.' ? 'Skipping ahead…' : rest);
+    }
     else { div.className = 'turn player'; div.textContent = m.content.replace(/^\[(DO|SAY|STORY)\]\s*/, ''); }
     box.appendChild(div);
   }
@@ -590,7 +636,7 @@ function renderStory() {
 }
 
 /* ================= game flow ================= */
-function startAdventure(title, scenario, tone, opening, setup) {
+function startAdventure(title, scenario, tone, opening, setup, brief) {
   if (!requireKey()) return;
   // per-game random facts (e.g. Azure Heavens' rolled spirit root) get baked
   // into this game's rules at creation so they stay fixed for its whole life
@@ -598,7 +644,11 @@ function startAdventure(title, scenario, tone, opening, setup) {
   game = {
     id: 'g' + Date.now(),
     title,
+    brief: brief || '',                 // the player's own description, for reference/editing
+    scenario: fullScenario,             // the compiled ruleset (editable per game)
     systemPrompt: buildSystemPrompt(fullScenario, tone, !!opening),
+    tone: tone || '',
+    hasOpening: !!opening,
     messages: [],
     updated: Date.now(),
   };
@@ -618,18 +668,74 @@ function startAdventure(title, scenario, tone, opening, setup) {
   }
 }
 
-function startCustom() {
-  const setting = document.getElementById('c-setting').value.trim();
-  const character = document.getElementById('c-character').value.trim();
+/* Load a preset's ruleset into the designer so it can be edited/extended */
+function loadPreset(id) {
+  if (!id) return;
+  const a = ADVENTURES.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('c-brief').value = a.prompt;
+  if (!document.getElementById('c-title').value.trim()) document.getElementById('c-title').value = a.title;
+}
+
+/* Game Designer: reads a freeform description, compiles a specialized GM ruleset */
+async function designGame(brief, tone) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({
+      model: 'claude-opus-5',
+      max_tokens: 4000,
+      output_config: { effort: 'medium' },
+      system: `You are the Game Designer for an interactive text-adventure engine. You read a player's description of the game they want and compile it into a specialized scenario briefing for the Game Master model that will run it.
+
+Output ONLY the briefing, as compact prose and short labelled lines — no preamble, no markdown headings, no meta-commentary. Cover, in this order, only what applies:
+- The world: setting, factions, and the handful of places and powers that matter.
+- The player character: who they are, what they can do, and what situation they open in. If the description leaves this open, decide something specific and interesting.
+- Key NPCs worth naming, each with a motivation.
+- Mechanics the Game Master must enforce every turn: any stat panel or status readout (give its exact fixed format in a fenced code block if the description calls for one), progression systems, resources, currencies, failure and death rules. Be concrete about what changes and what stays fixed.
+- Dice guidance: what kinds of action need a roll in this game, and how thresholds should scale.
+- Tone, pacing, and difficulty.
+- An opening hook for the very first scene.
+
+Rules: honor everything the player specified — never contradict or water down their mechanics. Fill gaps with specific, well-judged choices rather than vague options. Invent nothing that fights the described premise. Keep the whole briefing under 700 words. Aim for pacing that keeps the story moving unless the player explicitly asked for a slow burn.`,
+      messages: [{ role: 'user', content: `Player's game description:\n\n${brief}${tone ? `\n\nRequested tone: ${tone}` : ''}` }],
+    }),
+  });
+  if (!resp.ok) {
+    let msg = `Designer error (${resp.status})`;
+    try { msg += ': ' + (await resp.json()).error.message; } catch {}
+    throw new Error(msg);
+  }
+  const data = await resp.json();
+  if (data.stop_reason === 'refusal') throw new Error('The Game Designer declined this premise. Try rewording it.');
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  if (!text) throw new Error('The Game Designer returned nothing. Try again.');
+  return text;
+}
+
+async function startCustom() {
+  if (!requireKey()) return;
+  const brief = document.getElementById('c-brief').value.trim();
   const tone = document.getElementById('c-tone').value;
-  const quest = document.getElementById('c-quest').value.trim();
-  closeCustom();
-  const scenario = [
-    setting ? `World: ${setting}` : 'World: GM\'s choice — invent something compelling.',
-    character ? `Player character: ${character}` : 'Player character: GM\'s choice, introduced in the opening scene.',
-    quest ? `Opening goal: ${quest}` : '',
-  ].filter(Boolean).join('\n');
-  startAdventure(setting ? setting.slice(0, 40) : 'Custom Adventure', scenario, tone);
+  const title = document.getElementById('c-title').value.trim();
+  if (!brief) { alert('Describe the game you want first.'); return; }
+
+  const go = document.getElementById('c-go');
+  const status = document.getElementById('c-status');
+  go.disabled = true;
+  status.classList.remove('hidden');
+  status.textContent = 'The Game Designer is building your ruleset…';
+  try {
+    const scenario = await designGame(brief, tone);
+    closeCustom();
+    go.disabled = false;
+    status.classList.add('hidden');
+    startAdventure(title || brief.slice(0, 40), scenario, tone, null, null, brief);
+  } catch (err) {
+    go.disabled = false;
+    status.style.color = 'var(--danger)';
+    status.textContent = err.message;
+  }
 }
 
 function resumeGame(id) {
@@ -653,6 +759,7 @@ function migrateRules(g) {
     if (g.systemPrompt.includes(oldText)) { g.systemPrompt = g.systemPrompt.replace(oldText, newText); changed = true; }
   }
   if (!g.systemPrompt.includes('roll_dice')) { g.systemPrompt += '\n\nAdditional rule:\n' + DICE_RULE; changed = true; }
+  if (!g.systemPrompt.includes('[SKIP]')) { g.systemPrompt += '\n\nAdditional rules:\n' + PACING_RULE; changed = true; }
   if (changed) putSave(g);
 }
 
@@ -665,18 +772,24 @@ function requireKey() {
 function setMode(m) {
   mode = m;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
-  const ph = { do: 'What do you do?', say: 'What do you say?', story: 'Add to the story...' };
+  const ph = {
+    do: 'What do you do?', say: 'What do you say?', story: 'Add to the story...',
+    skip: 'Skip ahead to… (optional)',
+  };
   document.getElementById('player-input').placeholder = ph[m];
+  document.getElementById('send-btn').textContent = m === 'skip' ? 'Skip' : 'Send';
 }
 
 function sendTurn() {
   if (streaming || !game) return;
   const input = document.getElementById('player-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && mode !== 'skip') return;   // Skip works with no text
   input.value = '';
   autoGrow(input);
-  const tagged = `[${mode.toUpperCase()}] ${text}`;
+  const tagged = mode === 'skip'
+    ? (text ? `[SKIP] ${text}` : '[SKIP] Move the story forward to the next significant scene.')
+    : `[${mode.toUpperCase()}] ${text}`;
   runGM([{ role: 'user', content: tagged }], text);
 }
 
@@ -1040,6 +1153,16 @@ function saveSettings() {
   renderHome();
 }
 function closeCustom() { document.getElementById('custom-modal').classList.add('hidden'); }
+
+/* populate the designer's "start from a preset" dropdown */
+(() => {
+  const sel = document.getElementById('c-preset');
+  for (const a of ADVENTURES) {
+    const o = document.createElement('option');
+    o.value = a.id; o.textContent = a.title;
+    sel.appendChild(o);
+  }
+})();
 
 /* close modals on backdrop click */
 document.querySelectorAll('.modal-backdrop').forEach(b => {
