@@ -280,6 +280,12 @@
       <option value="serif">Serif</option>
       <option value="sans">Sans</option>
     </select>
+    <label>Narrator effort — how hard the AI thinks each turn</label>
+    <select id="set-effort">
+      <option value="low">Low — fastest & cheapest (default)</option>
+      <option value="medium">Medium — smarter scenes, ~60-80% more cost</option>
+      <option value="high">High — deepest storytelling, slowest</option>
+    </select>
     <label>Dice</label>
     <select id="set-karmic">
       <option value="1">Karmic dice — a bad roll raises the floor of the next</option>
@@ -1082,7 +1088,7 @@ async function streamNarration(g, gmDiv, box, allowDice = true) {
     messages: [...(ctx ? [{ role: 'user', content: ctx }] : []), ...windowMessages(g)],
   };
   if (!allowDice) body.tool_choice = { type: 'none' };   // one roll per turn, enforced
-  if (supportsEffort(cfg.narrator)) body.output_config = { effort: 'low' };
+  if (supportsEffort(cfg.narrator)) body.output_config = { effort: getEffort() };
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -1234,6 +1240,8 @@ const SIZES = { small: '16px', medium: '19px', large: '22px' };
 const getSize = () => SIZES[store.getItem('qf_size2')] ? store.getItem('qf_size2') : 'medium';
 const getFont = () => store.getItem('qf_font') || 'serif';
 const getKarmic = () => (store.getItem('qf_karmic') ?? '1') === '1';
+const EFFORTS = ['low', 'medium', 'high'];
+const getEffort = () => EFFORTS.includes(store.getItem('qf_effort')) ? store.getItem('qf_effort') : 'low';
 function applyPrefs() {
   const root = document.documentElement.style;
   root.setProperty('--story-size', SIZES[getSize()]);
@@ -1246,6 +1254,7 @@ function openSettings() {
   document.getElementById('set-size').value = getSize();
   document.getElementById('set-font').value = getFont();
   document.getElementById('set-karmic').value = getKarmic() ? '1' : '0';
+  document.getElementById('set-effort').value = getEffort();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
@@ -1255,6 +1264,7 @@ function saveSettings() {
   store.setItem('qf_size2', document.getElementById('set-size').value);
   store.setItem('qf_font', document.getElementById('set-font').value);
   store.setItem('qf_karmic', document.getElementById('set-karmic').value);
+  store.setItem('qf_effort', document.getElementById('set-effort').value);
   applyPrefs();
   closeSettings();
   renderHome();
