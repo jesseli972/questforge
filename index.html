@@ -340,7 +340,7 @@ Rules of play:
 - If the player attempts something impossible or tries to dictate outcomes for NPCs or the world in a [DO]/[SAY] input, narrate the attempt failing or being reinterpreted plausibly.
 - Introduce concrete details: names, sensory description, and occasional dialogue from NPCs.
 - Track the player's items, injuries, relationships, and goals implicitly and keep them consistent.
-- End most responses with the situation open — a question, a threat, a choice — but do not literally list options unless the player asks.
+- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.
 - Formatting: write mostly plain prose. You may use **bold** sparingly for emphasis, and a fenced code block for any status panel or stat display the scenario requires. Never use markdown tables, nested lists, or link syntax.
 
 Begin the adventure now with an opening scene that establishes the character, the setting, and an immediate hook. 3–5 paragraphs for this first scene only.`;
@@ -463,8 +463,22 @@ function startCustom() {
 function resumeGame(id) {
   if (!requireKey()) return;
   game = getSaves()[id];
+  migrateRules(game);
   showPlay();
   renderStory();
+}
+
+/* Saves carry their rules from creation time — patch superseded rule text on resume */
+const RULE_MIGRATIONS = [
+  ['- End most responses with the situation open — a question, a threat, a choice — but do not literally list options unless the player asks.',
+   '- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.'],
+];
+function migrateRules(g) {
+  let changed = false;
+  for (const [oldText, newText] of RULE_MIGRATIONS) {
+    if (g.systemPrompt.includes(oldText)) { g.systemPrompt = g.systemPrompt.replace(oldText, newText); changed = true; }
+  }
+  if (changed) putSave(g);
 }
 
 function requireKey() {
