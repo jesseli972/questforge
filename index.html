@@ -181,6 +181,7 @@
   <div class="brand" onclick="goHome()">Quest<span>Forge</span></div>
   <div class="header-btns">
     <button id="btn-home" class="hidden" onclick="goHome()">← Library</button>
+    <button id="btn-sheet" class="hidden" onclick="openSheet()">📜 Sheet</button>
     <button onclick="openSettings()">⚙ Settings</button>
   </div>
 </header>
@@ -260,6 +261,18 @@
   </div>
 </div>
 
+<!-- ============ SHEET MODAL ============ -->
+<div id="sheet-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>📜 Character Sheet</h2>
+    <p class="hint">Maintained automatically by the Scribe after each turn — the story's canonical record.</p>
+    <pre id="sheet-body" style="white-space:pre-wrap; font-family:var(--sans); font-size:14px; line-height:1.6; margin-top:14px; color:var(--text);"></pre>
+    <div class="modal-footer">
+      <button class="primary" onclick="document.getElementById('sheet-modal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ CUSTOM ADVENTURE MODAL ============ -->
 <div id="custom-modal" class="modal-backdrop hidden">
   <div class="modal">
@@ -332,14 +345,18 @@ Where does your soul anchor? Type a number — or name another beginning.`,
       };
       const elems = ['Metal', 'Wood', 'Water', 'Fire', 'Earth'].sort(() => Math.random() - .5);
       const root = pick([
-        ['Five Mixed Roots (all elements) — "trash roots"', 25],
-        [`Four Mixed Roots (${elems.slice(0, 4).join(', ')})`, 15],
-        [`True Triple Root (${elems.slice(0, 3).join(', ')})`, 15],
-        [`True Double Root (${elems.slice(0, 2).join(', ')})`, 15],
-        [`Heavenly Single Root (${elems[0]})`, 12],
-        [`Mutant ${pick([['Lightning', 1], ['Ice', 1], ['Wind', 1], ['Darkness', 1]])} Root`, 10],
-        ['Chaos Root — a five-element amalgam', 4],
-        ['Void Root — devours all energy', 4],
+        ['Five Mixed Roots (all elements) — "trash roots"', 21],
+        [`Four Mixed Roots (${elems.slice(0, 4).join(', ')})`, 13],
+        [`True Triple Root (${elems.slice(0, 3).join(', ')})`, 13],
+        [`True Double Root (${elems.slice(0, 2).join(', ')})`, 13],
+        [`Heavenly Single Root (${elems[0]})`, 11],
+        [`Mutant ${pick([['Lightning', 3], ['Ice', 3], ['Wind', 3], ['Darkness', 3], ['Blood', 2], ['Sound', 1]])} Root`, 11],
+        ['Sealed Root — reads as rootless to every test; something ancient blocks it, waiting', 6],
+        ['Yin–Yang Dual Root — twin opposing energies held in balance', 4],
+        ['Chaos Root — a five-element amalgam', 3],
+        ['Void Root — devours all energy', 3],
+        ['Space Root — bends distance itself; teleportation arts', 1],
+        ['Time Root — brushes against moments; forbidden by every sect', 1],
       ]);
       const quality = pick([['Mortal', 30], ['Low', 28], ['Intermediate', 22], ['High', 13], ['Supreme/Stainless', 7]]);
       const constitution = pick([
@@ -434,6 +451,7 @@ function goHome() {
   document.getElementById('view-play').classList.add('hidden');
   document.getElementById('view-home').classList.remove('hidden');
   document.getElementById('btn-home').classList.add('hidden');
+  document.getElementById('btn-sheet').classList.add('hidden');
   renderHome();
 }
 
@@ -496,6 +514,13 @@ function showPlay() {
   document.getElementById('view-home').classList.add('hidden');
   document.getElementById('view-play').classList.remove('hidden');
   document.getElementById('btn-home').classList.remove('hidden');
+  document.getElementById('btn-sheet').classList.remove('hidden');
+}
+
+function openSheet() {
+  document.getElementById('sheet-body').textContent =
+    game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.';
+  document.getElementById('sheet-modal').classList.remove('hidden');
 }
 
 function renderStory() {
@@ -640,20 +665,56 @@ function apiHeaders() {
 
 function systemTextFor(g) {
   let t = g.systemPrompt;
+  if (g.state) {
+    t += `\n\nCANONICAL GAME STATE — the authoritative record of established facts (it may lag one turn behind the story). Never contradict it; when narrating, rely on it rather than re-inferring facts from old scenes:\n${g.state}`;
+  }
   if (g.director?.brief) {
     t += `\n\nSECRET STORY PLAN from the Story Director. Steer the narrative toward these beats at a natural pace, adapting freely when the player surprises you. Never reveal, quote, or hint that a plan exists:\n${g.director.brief}`;
   }
   return t;
 }
 
+/* ---- canonical state: a scribe model keeps the character sheet & world facts ---- */
+function transcriptOf(messages, maxChars) {
+  return messages.map(m => {
+    const text = typeof m.content === 'string' ? m.content
+      : m.content.map(b => b.type === 'text' ? b.text : b.type === 'tool_result' ? `[dice: ${b.content}]` : '').filter(Boolean).join('\n');
+    return (m.role === 'assistant' ? 'GM: ' : 'Player: ') + text;
+  }).join('\n\n').slice(-maxChars);
+}
+
+async function updateState(g) {
+  if (g._stateUpdating) return;
+  g._stateUpdating = true;
+  try {
+    const transcript = transcriptOf(g.messages.slice(-6), 9000);
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1500,
+        system: 'You are the Scribe for a text adventure game. You maintain its canonical state sheet. Output ONLY the full updated sheet with exactly these sections: CHARACTER / STATS & ABILITIES / INVENTORY / CONDITIONS / RELATIONSHIPS / GOALS & QUESTS / WORLD FACTS / RECENT EVENTS (3-5 bullets on the latest scenes). Rules: record only facts established in play — never invent; update values that changed; drop resolved or obsolete entries; keep the whole sheet under 450 words.',
+        messages: [{
+          role: 'user',
+          content: `Current state sheet:\n${g.state || '(none yet — create the first sheet from the scenes below)'}\n\nLatest scenes:\n${transcript}\n\nOutput the full updated state sheet.`,
+        }],
+      }),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (text) { g.state = text; putSave(g); }
+  } catch { /* non-fatal: sheet lags a turn */ }
+  finally { delete g._stateUpdating; }
+}
+
 /* Director mode: Opus writes/updates the hidden story plan */
 async function planStory(g) {
-  const transcript = g.messages.slice(-24)
-    .map(m => (m.role === 'assistant' ? 'GM: ' : 'Player: ') + m.content)
-    .join('\n\n').slice(-12000);
+  const transcript = transcriptOf(g.messages.slice(-24), 12000);
   const ask = g.messages.filter(m => m.role === 'assistant').length === 0
     ? 'Create the initial secret story plan for this adventure.'
-    : `Recent transcript:\n\n${transcript}\n\n${g.director?.brief ? `Current plan:\n${g.director.brief}\n\n` : ''}Update the secret story plan to reflect what has actually happened. Keep what still works; adapt whatever the player has derailed.`;
+    : `${g.state ? `Canonical game state:\n${g.state}\n\n` : ''}Recent transcript:\n\n${transcript}\n\n${g.director?.brief ? `Current plan:\n${g.director.brief}\n\n` : ''}Update the secret story plan to reflect what has actually happened. Keep what still works; adapt whatever the player has derailed.`;
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: apiHeaders(),
@@ -863,6 +924,7 @@ async function runGM(newMessages) {
 
     g.updated = Date.now();
     putSave(g);
+    updateState(g);   // scribe refreshes the canonical sheet in the background
     maybeReplan(g);
   } catch (err) {
     gmDiv.className = 'turn error';
