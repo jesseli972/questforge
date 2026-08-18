@@ -272,7 +272,7 @@ const ADVENTURES = [
     blurb:'A transmigrated soul claws from mortal to Heavenly Immortal in a world of sects, tournaments, and merciless fate.',
     prompt:`A high-fantasy xianxia cultivation RPG set in the Azure Heavens — a vast continent of spirit veins, floating mountains, and ancient ruins, contested by three superpowers: the righteous Martial Alliance (the Namgung sword clan, the poison-master Tang clan, the strategist Jaegal clan, and sects like Mount Hua, Wudang, Shaolin, and KongTong), the unpredictable Chaotic Faction (the fiercely independent Moyong clan, Kunlun, Diancang), and the ruthless Demonic Sect (which has blackmailed Huashan and Hwang Bo, and whose legendary Heavenly Demon is rumored to be returning). The neutral Habuk-Peng clan sells raw strength to the highest bidder. Rare Mystical Realms — pocket dimensions dense with spirit energy — appear during celestial alignments and are fiercely contested.
 
-The player is a transmigrated soul from modern Earth who wakes in this brutal world. In the opening scene, randomly determine and announce their starting location, elemental spirit root, and Innate Constitution (e.g., Sword Bloodline, Void Body). Spirit root tiers: Heavenly single roots are genius-tier (2–3x speed); True double/triple roots are strong; four/five mixed roots are slow "trash" roots; Mutant roots (Lightning, Ice, Wind, Darkness) grant unique combat abilities; Chaos/Void roots are vanishingly rare. Root quality ranks: Mortal, Low, Intermediate, High, Supreme/Stainless.
+The player is a transmigrated soul from modern Earth who wakes in this brutal world. The prologue has already been shown to the player as your first message, ending in a choice of four starting fates. Their first reply selects one (a number, or a custom beginning they describe). Honor the choice exactly: assign the matching spirit root, Innate Constitution, and a fitting starting location, then open LOG 01-A at that location with the full Panel. Spirit root tiers: Heavenly single roots are genius-tier (2–3x speed); True double/triple roots are strong; four/five mixed roots are slow "trash" roots; Mutant roots (Lightning, Ice, Wind, Darkness) grant unique combat abilities; Chaos/Void roots are vanishingly rare. Root quality ranks: Mortal, Low, Intermediate, High, Supreme/Stainless.
 
 Mechanics to enforce every turn:
 - End EVERY response by displaying The Panel in a compact fixed format: Realm & Stage, Qi Saturation, Lifespan, Physical Temple (Strength/Agility/Constitution), Cultivation Technique (only one active; switching to a clashing technique risks severe Qi Deviation), Martial Techniques with mastery (Beginner/Intermediate/Greater/Perfect), and Innate Constitution. Values change; categories never do — never add or remove Panel fields.
@@ -281,7 +281,31 @@ Mechanics to enforce every turn:
 - Adjudicate risky actions honestly against realm gaps and stats; success thresholds scale with realm. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
 - Meditation can trigger time skips of months to decades. The Dragon & Phoenix Festival (geniuses under 20) and the decennial Grand Azure Tournament (ages 20–100) are pivotal events; death in a tournament is a permanent Game Over — announce it and end the story.
 
-Tone: serious, epic, and philosophical. Pacing: very slow — emphasize the passage of years. Difficulty: high — death or permanent injury are common results of recklessness.` },
+Tone: serious, epic, and philosophical. Pacing: very slow — emphasize the passage of years. Difficulty: high — death or permanent injury are common results of recklessness.`,
+    opening: `# LOG 00 — Prologue
+
+Headlights. A horn. Cold.
+
+You wake face-down on stone that smells of incense and old blood. Your hands are not your hands — younger, thinner, calloused in unfamiliar places. Memory returns in two streams: a life on Earth that just ended, and seventeen years of a life here, in the **Azure Heavens**, that has barely begun. Translucent characters ignite before your eyes:
+
+\`\`\`
+═══ CULTIVATION PANEL — INITIALIZING ═══
+Awaiting fate selection...
+\`\`\`
+
+The Panel grants you one mercy before this world takes hold: the shape of your beginning.
+
+**Choose your fate:**
+
+1. **Namgung Guest Disciple** — Heavenly Sword Root (High) · Sword Bloodline. Genius-tier cultivation speed and the Martial Alliance's finest resources — but every rival's eyes on your back, and clan politics that kill more disciples than demons do.
+
+2. **The Trash-Root Wanderer** — Five Mixed Roots (Mortal) · hidden Void Body (Supreme). Called worthless and free to go anywhere, carrying a dormant constitution that could one day devour all energy — if you survive long enough to awaken it.
+
+3. **Child of the Dark Path** — Mutant Darkness Root (Intermediate) · Shadow-Meld Physique. Unique combat arts the righteous sects fear. The Demonic Sect considers you property; the Alliance considers you a threat.
+
+4. **The Hermit's Heir** — True Double Root, Water & Wood (High) · Longevity Vessel. A dead master's hidden cave, a complete cultivation technique, a jar of pills. No sect, no backing — and somewhere out there, the killers who know the cave exists.
+
+Type a number — or describe the beginning you want.` },
   { id:'starfall', emoji:'🚀', genre:'Sci-Fi', title:'Starfall Salvage',
     blurb:'Your junker crew found a derelict warship that should not exist. Something inside is still on.',
     prompt:'Hard sci-fi salvage adventure. The player captains a small, indebted salvage ship on the rim of settled space. They have just docked with a derelict military vessel missing for 80 years — its reactor is warm, and its logs are wrong.' },
@@ -326,7 +350,7 @@ const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(L
 const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
 
 /* ================= GM system prompt ================= */
-function buildSystemPrompt(scenario, tone) {
+function buildSystemPrompt(scenario, tone, hasOpening) {
   return `You are the Game Master of an interactive text adventure. You run the world; the player controls only their own character.
 
 Scenario: ${scenario}
@@ -343,7 +367,9 @@ Rules of play:
 - ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.
 - Formatting: write mostly plain prose. You may use **bold** sparingly for emphasis, and a fenced code block for any status panel or stat display the scenario requires. Never use markdown tables, nested lists, or link syntax.
 
-Begin the adventure now with an opening scene that establishes the character, the setting, and an immediate hook. 3–5 paragraphs for this first scene only.`;
+${hasOpening
+  ? 'The prologue was pre-written and has already been shown to the player as your first message. Continue the story from the player\'s reply to it.'
+  : 'Begin the adventure now with an opening scene that establishes the character, the setting, and an immediate hook. 3–5 paragraphs for this first scene only.'}`;
 }
 
 /* ================= views ================= */
@@ -370,7 +396,7 @@ function renderHome() {
     const el = document.createElement('div');
     el.className = 'card';
     el.innerHTML = `<div class="emoji">${a.emoji}</div><div class="genre">${a.genre}</div><h3>${a.title}</h3><p>${a.blurb}</p>`;
-    el.onclick = () => startAdventure(a.title, a.prompt, null);
+    el.onclick = () => startAdventure(a.title, a.prompt, null, a.opening);
     grid.appendChild(el);
   }
 
@@ -431,19 +457,29 @@ function renderStory() {
 }
 
 /* ================= game flow ================= */
-function startAdventure(title, scenario, tone) {
+function startAdventure(title, scenario, tone, opening) {
   if (!requireKey()) return;
   game = {
     id: 'g' + Date.now(),
     title,
-    systemPrompt: buildSystemPrompt(scenario, tone),
+    systemPrompt: buildSystemPrompt(scenario, tone, !!opening),
     messages: [],
     updated: Date.now(),
   };
   showPlay();
-  renderStory();
-  // kick off with an opening-scene request
-  runGM([{ role: 'user', content: '[STORY] Begin the adventure.' }]);
+  if (opening) {
+    // scripted prologue: identical every run, shown instantly, no API call
+    game.messages.push(
+      { role: 'user', content: '[STORY] Begin the adventure.' },
+      { role: 'assistant', content: opening },
+    );
+    putSave(game);
+    renderStory();
+  } else {
+    renderStory();
+    // kick off with an opening-scene request
+    runGM([{ role: 'user', content: '[STORY] Begin the adventure.' }]);
+  }
 }
 
 function startCustom() {
