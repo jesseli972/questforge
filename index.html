@@ -419,6 +419,11 @@ const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(L
 const delSave  = id => { const s = getSaves(); delete s[id]; store.setItem(LS.saves, JSON.stringify(s)); renderHome(); };
 
 /* ================= GM system prompt ================= */
+const PROMPT_RULE = `- End every response by prompting the player, in one of two styles:
+  OPEN (the default — roughly three of every four turns): finish with a single evocative line that invites action — a question, a looming threat, an unresolved moment — with NO listed options.
+  CHOICE (only at genuine branch points — irreversible decisions, a scene closing onto several distinct paths, tournament crossroads, or a player who seems stuck): 3–4 numbered options, concrete and meaningfully different, at least one bold or risky, plus a brief note that anything else is allowed. A bare number reply picks that option.
+  If the canonical state sheet ends with a NEXT PROMPT recommendation, follow it unless the player's latest input clearly demands the other style.`;
+
 const DICE_RULE = `- Dice: for any non-trivial action with a real chance of failure — combat, persuasion, stealth, theft, breakthroughs — call the roll_dice tool BEFORE narrating the outcome. Set the die size and the mixed/success thresholds honestly from the difficulty and the character's current abilities, then narrate strictly according to the returned outcome. Never soften a failure into a success, and never roll for trivial actions.`;
 
 function buildSystemPrompt(scenario, tone, hasOpening) {
@@ -436,7 +441,7 @@ ${DICE_RULE}
 - If the player attempts something impossible or tries to dictate outcomes for NPCs or the world in a [DO]/[SAY] input, narrate the attempt failing or being reinterpreted plausibly.
 - Introduce concrete details: names, sensory description, and occasional dialogue from NPCs.
 - Track the player's items, injuries, relationships, and goals implicitly and keep them consistent.
-- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.
+${PROMPT_RULE}
 - Formatting: write mostly plain prose. You may use **bold** sparingly for emphasis, and a fenced code block for any status panel or stat display the scenario requires. Never use markdown tables, nested lists, or link syntax.
 
 ${hasOpening
@@ -609,7 +614,9 @@ function resumeGame(id) {
 /* Saves carry their rules from creation time — patch superseded rule text on resume */
 const RULE_MIGRATIONS = [
   ['- End most responses with the situation open — a question, a threat, a choice — but do not literally list options unless the player asks.',
-   '- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.'],
+   PROMPT_RULE],
+  ['- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.',
+   PROMPT_RULE],
 ];
 function migrateRules(g) {
   let changed = false;
@@ -694,7 +701,7 @@ async function updateState(g) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5',
         max_tokens: 1500,
-        system: 'You are the Scribe for a text adventure game. You maintain its canonical state sheet. Output ONLY the full updated sheet with exactly these sections: CHARACTER / STATS & ABILITIES / INVENTORY / CONDITIONS / RELATIONSHIPS / GOALS & QUESTS / WORLD FACTS / RECENT EVENTS (3-5 bullets on the latest scenes). Rules: record only facts established in play — never invent; update values that changed; drop resolved or obsolete entries; keep the whole sheet under 450 words.',
+        system: 'You are the Scribe for a text adventure game. You maintain its canonical state sheet. Output ONLY the full updated sheet with exactly these sections: CHARACTER / STATS & ABILITIES / INVENTORY / CONDITIONS / RELATIONSHIPS / GOALS & QUESTS / WORLD FACTS / RECENT EVENTS (3-5 bullets on the latest scenes), then end with exactly one line: "NEXT PROMPT: open" or "NEXT PROMPT: choice" plus a 4-8 word reason. Recommend "choice" ONLY when the story is arriving at a genuine branch point — an irreversible decision, a scene closing onto several distinct paths, a crossroads the player must commit to; otherwise recommend "open". Most turns should be "open". Rules for the sheet: record only facts established in play — never invent; update values that changed; drop resolved or obsolete entries; keep the whole sheet under 450 words.',
         messages: [{
           role: 'user',
           content: `Current state sheet:\n${g.state || '(none yet — create the first sheet from the scenes below)'}\n\nLatest scenes:\n${transcript}\n\nOutput the full updated state sheet.`,
