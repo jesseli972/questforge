@@ -44,9 +44,17 @@
     padding-left: calc(24px + env(safe-area-inset-left, 0px));
     padding-right: calc(24px + env(safe-area-inset-right, 0px));
   }
-  .brand { font-size: 22px; color: var(--accent); cursor: pointer; user-select: none; }
+  .brand { font-size: 22px; color: var(--accent); cursor: pointer; user-select: none; white-space: nowrap; }
   .brand span { color: var(--text); }
-  .header-btns { display: flex; gap: 10px; }
+  .header-btns { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn-label { display: inline; }
+  /* narrow screens: collapse header buttons to their icons so nothing overflows */
+  @media (max-width: 520px) {
+    header { padding-left: calc(16px + env(safe-area-inset-left, 0px)); padding-right: calc(16px + env(safe-area-inset-right, 0px)); }
+    .brand { font-size: 19px; }
+    .btn-label { display: none; }
+    .header-btns button { padding: 8px 11px; font-size: 15px; }
+  }
   main { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
 
   button {
@@ -130,15 +138,19 @@
     display: block;
     background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
     padding: 10px 14px; margin: 2px 0; overflow-x: auto; white-space: pre;
-    font-family: ui-monospace, Menlo, monospace; font-size: .82em; line-height: 1.55;
+    font-family: ui-monospace, Menlo, monospace; line-height: 1.55;
     color: #d8ceba;
+    /* fixed, not em-relative: keeps stat panels from overflowing narrow screens
+       when the reader picks a large story size */
+    font-size: 13.5px;
   }
+  @media (max-width: 420px) { .turn.gm .md-pre { font-size: 12px; padding: 9px 11px; } }
   .turn.player {
-    background: var(--bg-3); border-left: 3px solid var(--accent);
-    padding: 10px 14px; border-radius: 0 8px 8px 0; color: var(--text);
-    font-style: italic; white-space: pre-wrap;
+    border-left: 2px solid var(--accent); padding: 2px 0 2px 14px;
+    color: var(--text-dim); font-style: italic; white-space: pre-wrap;
+    font-size: calc(var(--story-size, 19px) * .88); font-family: var(--sans);
+    margin-bottom: 20px;
   }
-  .turn.player::before { content: "You"; display: block; font-style: normal; font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
   .turn.error { color: var(--danger); font-size: 14px; border: 1px solid var(--danger); border-radius: 8px; padding: 10px 14px; }
   .thinking-dots { color: var(--text-dim); font-style: italic; }
 
@@ -154,17 +166,32 @@
   .mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
   .dice {
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px;
-    background: var(--accent-soft); border: 1px solid var(--accent);
-    border-radius: 10px; padding: 9px 13px; margin: 0 0 22px;
+    display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 2px;
+    align-items: center;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 10px 14px; margin: 0 0 22px;
     font-family: var(--sans); font-size: 14px;
   }
-  .dice .roll { font-size: 21px; color: var(--accent); font-weight: 700; }
-  .dice .dsides { color: var(--text-dim); }
-  .dice .outcome.success { color: #8fbf72; font-weight: 700; }
-  .dice .outcome.mixed { color: var(--accent); font-weight: 700; }
-  .dice .outcome.failure { color: var(--danger); font-weight: 700; }
-  .dice .thr { color: var(--text-dim); font-size: 12px; width: 100%; }
+  .dice .num {
+    grid-row: 1 / span 3; display: flex; flex-direction: column; align-items: center;
+    min-width: 42px; padding-right: 12px; border-right: 1px solid var(--border);
+  }
+  .dice .roll { font-size: 24px; color: var(--accent); font-weight: 700; line-height: 1.1; }
+  .dice .dsides { color: var(--text-dim); font-size: 11px; }
+  .dice .label { color: var(--text); }
+  .dice .outcome { font-weight: 700; font-size: 13px; letter-spacing: .03em; text-transform: uppercase; }
+  .dice .outcome.success { color: #8fbf72; }
+  .dice .outcome.mixed { color: var(--accent); }
+  .dice .outcome.failure { color: var(--danger); }
+  .dice .thr { color: var(--text-dim); font-size: 11.5px; }
+
+  .jump-latest {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: 12px; z-index: 5; font-size: 13px; padding: 7px 15px;
+    border-radius: 999px; background: var(--bg-3); border: 1px solid var(--accent);
+    color: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.5);
+  }
 
   .banner {
     background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text);
@@ -180,9 +207,9 @@
 <header>
   <div class="brand" onclick="goHome()">Quest<span>Forge</span></div>
   <div class="header-btns">
-    <button id="btn-home" class="hidden" onclick="goHome()">← Library</button>
-    <button id="btn-sheet" class="hidden" onclick="openSheet()">📜 Sheet</button>
-    <button onclick="openSettings()">⚙ Settings</button>
+    <button id="btn-home" class="hidden" onclick="goHome()" title="Library">←<span class="btn-label"> Library</span></button>
+    <button id="btn-sheet" class="hidden" onclick="openSheet()" title="Character sheet">📜<span class="btn-label"> Sheet</span></button>
+    <button onclick="openSettings()" title="Settings">⚙<span class="btn-label"> Settings</span></button>
   </div>
 </header>
 
@@ -210,7 +237,8 @@
 <!-- ============ PLAY ============ -->
 <div id="view-play" class="play-wrap hidden">
   <div class="story" id="story"></div>
-  <div class="composer">
+  <div class="composer" style="position:relative;">
+    <button id="jump-latest" class="jump-latest hidden" onclick="jumpToLatest()">↓ Latest</button>
     <div class="mode-row">
       <button class="mode-btn active" data-mode="do" onclick="setMode('do')">Do</button>
       <button class="mode-btn" data-mode="say" onclick="setMode('say')">Say</button>
@@ -218,6 +246,7 @@
     </div>
     <div class="composer-inner">
       <textarea id="player-input" rows="1" placeholder="What do you do?"
+        oninput="autoGrow(this)"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendTurn();}"></textarea>
       <button class="primary" id="send-btn" onclick="sendTurn()">Send</button>
     </div>
@@ -646,8 +675,9 @@ function sendTurn() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  autoGrow(input);
   const tagged = `[${mode.toUpperCase()}] ${text}`;
-  runGM([{ role: 'user', content: tagged }]);
+  runGM([{ role: 'user', content: tagged }], text);
 }
 
 /* ================= story engine ================= */
@@ -788,14 +818,33 @@ function rollDice(g, inp) {
 }
 
 function diceHtml(r) {
-  const oc = r.outcome === 'mixed' ? 'Mixed success' : r.outcome[0].toUpperCase() + r.outcome.slice(1);
-  return `<span>🎲</span> <span class="roll">${r.roll}</span><span class="dsides">/d${r.sides}</span> — ${escapeHtml(r.label)} → <span class="outcome ${r.outcome}">${oc}</span>` +
-    `<span class="thr">fail &lt;${r.mixed_at} · mixed ${r.mixed_at}–${r.success_at - 1} · success ${r.success_at}+${r.karmic ? ' · karmic floor applied' : ''}</span>`;
+  const oc = r.outcome === 'mixed' ? 'Mixed success' : r.outcome;
+  return `<span class="num"><span class="roll">${r.roll}</span><span class="dsides">d${r.sides}</span></span>` +
+    `<span class="label">${escapeHtml(r.label)}</span>` +
+    `<span class="outcome ${r.outcome}">${oc}</span>` +
+    `<span class="thr">fail &lt;${r.mixed_at} · mixed ${r.mixed_at}–${r.success_at - 1} · success ${r.success_at}+${r.karmic ? ' · karmic floor' : ''}</span>`;
 }
 
 /* Only auto-scroll when the reader is already at the bottom — never yank
    the view away from someone reading earlier text. */
 const nearBottom = box => box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+
+function autoGrow(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+}
+
+function jumpToLatest() {
+  const box = document.getElementById('story');
+  box.scrollTop = box.scrollHeight;
+}
+
+/* Show the "↓ Latest" affordance only when scrolled away from the newest text */
+function syncJumpBtn() {
+  const box = document.getElementById('story');
+  document.getElementById('jump-latest').classList.toggle('hidden', nearBottom(box));
+}
+document.getElementById('story').addEventListener('scroll', syncJumpBtn, { passive: true });
 
 function makeGmDiv(box) {
   const stick = nearBottom(box);
@@ -885,7 +934,7 @@ async function streamNarration(g, gmDiv, box) {
   return { blocks: blocks.filter(b => b.type !== 'text' || b.text.trim()), text, stopReason };
 }
 
-async function runGM(newMessages) {
+async function runGM(newMessages, draftText) {
   streaming = true;
   document.getElementById('send-btn').disabled = true;
 
@@ -947,9 +996,15 @@ async function runGM(newMessages) {
       : (err.message || 'Something went wrong. Please try again.');
     // roll back the whole turn (player message + any partial hops) so it can be retried
     g.messages = g.messages.slice(0, startLen);
+    // give the player their typed action back instead of silently losing it
+    if (draftText) {
+      const input = document.getElementById('player-input');
+      if (!input.value.trim()) { input.value = draftText; autoGrow(input); }
+    }
   } finally {
     streaming = false;
     document.getElementById('send-btn').disabled = false;
+    syncJumpBtn();
     document.getElementById('player-input').focus();
   }
 }
