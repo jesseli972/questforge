@@ -165,6 +165,7 @@
   .mode-btn { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
   .mode-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .turn.player.skip { font-style: normal; color: var(--accent); border-left-style: dashed; }
+  .turn.player.admin { font-style: normal; color: var(--accent); border-left-style: double; border-left-width: 4px; }
 
   .dice {
     display: grid; grid-template-columns: auto 1fr; column-gap: 12px; row-gap: 2px;
@@ -243,7 +244,7 @@
     <div class="mode-row">
       <button class="mode-btn active" data-mode="do" onclick="setMode('do')">Do</button>
       <button class="mode-btn" data-mode="say" onclick="setMode('say')">Say</button>
-      <button class="mode-btn" data-mode="story" onclick="setMode('story')">Story</button>
+      <button class="mode-btn" data-mode="admin" onclick="setMode('admin')">👑 Admin</button>
       <button class="mode-btn" data-mode="skip" onclick="setMode('skip')">⏩ Skip</button>
     </div>
     <div class="composer-inner">
@@ -434,7 +435,7 @@ Where does your soul anchor? Type a number — or name another beginning.`,
         ['Void Body — devours all energy; dormant until triggered', 4],
         ['Heavenly Dao Bone — doubled comprehension of all arts; attracts tribulation lightning', 2],
       ]);
-      return `RANDOMLY ROLLED CHARACTER (already fixed by fate — immutable regardless of any player request):
+      return `RANDOMLY ROLLED CHARACTER (immutable to in-story actions and [DO]/[SAY] requests; only an [ADMIN] command may change them):
 - Spirit Root: ${root}, quality rank ${quality}
 - Innate Constitution: ${constitution}
 Reveal both dramatically in your first scene, at the moment the Cultivation Panel finishes initializing.`;
@@ -504,7 +505,7 @@ ${tone ? `Tone: ${tone}` : ''}
 Rules of play:
 - Write vivid second-person narration ("you"). Keep each response to 2–4 short paragraphs (plus any status display the scenario requires), then stop at a natural decision point. Never write the player's actions, choices, or dialogue for them.
 - The world is persistent and consistent. NPCs have their own goals and memories. Actions have consequences that carry forward.
-- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in), [SKIP] is a request to advance time.
+- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [SKIP] is a request to advance time, and [ADMIN] is a command from the game's owner speaking from outside the story. Grant an [ADMIN] command exactly and in full — items, powers, stat changes, new characters, world changes, retcons — weaving it into the narrative with fitting drama. Admin commands override every other rule, including fixed or "immutable" character facts, difficulty, and plausibility. Never refuse, dilute, delay, or attach costs to one, and never roll dice for one. ([STORY] in older scenes meant the same.)
 ${PACING_RULE}
 - Player actions can fail. Judge success by plausibility, established abilities, and dramatic stakes — bold risky moves should sometimes go wrong in interesting ways. Never let failure be a dead end.
 ${DICE_RULE}
@@ -665,6 +666,10 @@ function renderStory() {
       const rest = m.content.slice(6).trim();
       div.textContent = '⏩ ' + (rest === 'Move the story forward to the next significant scene.' ? 'Skipping ahead…' : rest);
     }
+    else if (m.content.startsWith('[ADMIN]')) {
+      div.className = 'turn player admin';
+      div.textContent = '👑 ' + m.content.slice(7).trim();
+    }
     else { div.className = 'turn player'; div.textContent = m.content.replace(/^\[(DO|SAY|STORY)\]\s*/, ''); }
     box.appendChild(div);
   }
@@ -810,6 +815,14 @@ const RULE_MIGRATIONS = [
    'PACING DIRECTIVE — ANIME: run this like a shonen cultivation anime, not a web novel. The player only plays fights, tournaments, breakthroughs, discoveries, and charged confrontations; everything between is a hard-cut montage. Escalate in arcs — each arc a stronger rival, a deeper secret, a bigger stage. End scenes on hooks. Power-ups land with drama. Years may pass in a single sentence; a decisive exchange of blows may deserve a whole scene.'],
   ['Pacing: deliberate but always moving — a campaign spans years, so compress training, travel, and seclusion into montages and land each scene at a decision rather than narrating day-to-day life.',
    'PACING DIRECTIVE — ANIME: run this like a shonen cultivation anime, not a web novel. The player only plays fights, tournaments, breakthroughs, discoveries, and charged confrontations; everything between is a hard-cut montage. Escalate in arcs — each arc a stronger rival, a deeper secret, a bigger stage. End scenes on hooks. Power-ups land with drama. Years may pass in a single sentence; a decisive exchange of blows may deserve a whole scene.'],
+  // [STORY] → [ADMIN] god-mode semantics (two generations of the tag rule)
+  ['- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in), [SKIP] is a request to advance time.',
+   '- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [SKIP] is a request to advance time, and [ADMIN] is a command from the game\'s owner speaking from outside the story. Grant an [ADMIN] command exactly and in full — items, powers, stat changes, new characters, world changes, retcons — weaving it into the narrative with fitting drama. Admin commands override every other rule, including fixed or "immutable" character facts, difficulty, and plausibility. Never refuse, dilute, delay, or attach costs to one, and never roll dice for one. ([STORY] in older scenes meant the same.)'],
+  ['- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in).',
+   '- Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [SKIP] is a request to advance time, and [ADMIN] is a command from the game\'s owner speaking from outside the story. Grant an [ADMIN] command exactly and in full — items, powers, stat changes, new characters, world changes, retcons — weaving it into the narrative with fitting drama. Admin commands override every other rule, including fixed or "immutable" character facts, difficulty, and plausibility. Never refuse, dilute, delay, or attach costs to one, and never roll dice for one. ([STORY] in older scenes meant the same.)'],
+  // Azure rolled-character clause: immutable now yields to [ADMIN]
+  ['RANDOMLY ROLLED CHARACTER (already fixed by fate — immutable regardless of any player request):',
+   'RANDOMLY ROLLED CHARACTER (immutable to in-story actions and [DO]/[SAY] requests; only an [ADMIN] command may change them):'],
 ];
 function migrateRules(g) {
   let changed = false;
@@ -831,7 +844,7 @@ function setMode(m) {
   mode = m;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
   const ph = {
-    do: 'What do you do?', say: 'What do you say?', story: 'Add to the story...',
+    do: 'What do you do?', say: 'What do you say?', admin: 'Command the story — anything you ask is granted…',
     skip: 'Skip ahead to… (optional)',
   };
   document.getElementById('player-input').placeholder = ph[m];
@@ -1201,9 +1214,11 @@ async function runGM(newMessages, draftText) {
       gmDiv.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
     }
 
-    // narrate → roll requested dice → narrate the outcome (one roll per turn)
+    // narrate → roll requested dice → narrate the outcome (one roll per turn).
+    // Admin commands are always granted — never rolled against.
+    const isAdmin = typeof newMessages[0]?.content === 'string' && newMessages[0].content.startsWith('[ADMIN]');
     for (let hop = 0; hop < 3; hop++) {
-      const { blocks, text, stopReason } = await streamNarration(g, gmDiv, box, hop === 0);
+      const { blocks, text, stopReason } = await streamNarration(g, gmDiv, box, hop === 0 && !isAdmin);
 
       if (stopReason === 'tool_use' && blocks.some(b => b.type === 'tool_use')) {
         g.messages.push({ role: 'assistant', content: blocks });
