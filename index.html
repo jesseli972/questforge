@@ -116,8 +116,8 @@
   .story {
     flex: 1; overflow-y: auto; padding: 24px 20px 12px; scroll-behavior: smooth;
   }
-  .turn { margin-bottom: 22px; line-height: 1.65; font-size: 16px; }
-  .turn.gm { font-family: var(--serif); white-space: pre-wrap; }
+  .turn { margin-bottom: 22px; line-height: 1.65; font-size: var(--story-size, 16px); }
+  .turn.gm { font-family: var(--story-font, var(--serif)); white-space: pre-wrap; }
   .turn.player {
     background: var(--bg-3); border-left: 3px solid var(--accent);
     padding: 10px 14px; border-radius: 0 8px 8px 0; color: var(--text);
@@ -209,6 +209,17 @@
       <option value="claude-sonnet-5">Claude Sonnet 5 — fast, near-Opus quality</option>
       <option value="claude-haiku-4-5">Claude Haiku 4.5 — cheapest</option>
     </select>
+    <label>Story text size</label>
+    <select id="set-size">
+      <option value="14">Small</option>
+      <option value="16">Medium</option>
+      <option value="19">Large</option>
+    </select>
+    <label>Story font</label>
+    <select id="set-font">
+      <option value="serif">Serif</option>
+      <option value="sans">Sans</option>
+    </select>
     <div class="modal-footer">
       <button onclick="closeSettings()">Cancel</button>
       <button class="primary" onclick="saveSettings()">Save</button>
@@ -243,8 +254,19 @@
 /* ================= adventure library ================= */
 const ADVENTURES = [
   { id:'azure',   emoji:'⛰️', genre:'Fantasy · Cultivation', title:'Azure Heavens',
-    blurb:'Rise from mortal outer disciple to immortal legend in a sect full of rivals and secrets.',
-    prompt:'A xianxia cultivation world. The player is a talentless outer disciple of the Azure Heaven Sect who has just discovered a mysterious jade pendant containing the fading spirit of an ancient cultivator. Rivals scheme, elders test, and the path to immortality is cruel.' },
+    blurb:'A transmigrated soul claws from mortal to Heavenly Immortal in a world of sects, tournaments, and merciless fate.',
+    prompt:`A high-fantasy xianxia cultivation RPG set in the Azure Heavens — a vast continent of spirit veins, floating mountains, and ancient ruins, contested by three superpowers: the righteous Martial Alliance (the Namgung sword clan, the poison-master Tang clan, the strategist Jaegal clan, and sects like Mount Hua, Wudang, Shaolin, and KongTong), the unpredictable Chaotic Faction (the fiercely independent Moyong clan, Kunlun, Diancang), and the ruthless Demonic Sect (which has blackmailed Huashan and Hwang Bo, and whose legendary Heavenly Demon is rumored to be returning). The neutral Habuk-Peng clan sells raw strength to the highest bidder. Rare Mystical Realms — pocket dimensions dense with spirit energy — appear during celestial alignments and are fiercely contested.
+
+The player is a transmigrated soul from modern Earth who wakes in this brutal world. In the opening scene, randomly determine and announce their starting location, elemental spirit root, and Innate Constitution (e.g., Sword Bloodline, Void Body). Spirit root tiers: Heavenly single roots are genius-tier (2–3x speed); True double/triple roots are strong; four/five mixed roots are slow "trash" roots; Mutant roots (Lightning, Ice, Wind, Darkness) grant unique combat abilities; Chaos/Void roots are vanishingly rare. Root quality ranks: Mortal, Low, Intermediate, High, Supreme/Stainless.
+
+Mechanics to enforce every turn:
+- End EVERY response by displaying The Panel in a compact fixed format: Realm & Stage, Qi Saturation, Lifespan, Physical Temple (Strength/Agility/Constitution), Cultivation Technique (only one active; switching to a clashing technique risks severe Qi Deviation), Martial Techniques with mastery (Beginner/Intermediate/Greater/Perfect), and Innate Constitution. Values change; categories never do — never add or remove Panel fields.
+- Realms in order: Qi Refining, Foundation Establishment, Core Formation, Golden Core, Nascent Soul, Void Refining, Half-Immortal, Earth Immortal, Heavenly Immortal — each with Early/Mid/Late/Peak stages. Qi requirements double per minor stage and increase 5x per major realm. Breakthroughs can fail, causing Qi Deviation or death.
+- Label every scene with a Log ID (LOG 01-A, LOG 01-B, ...). If the player asks to revert to a Log ID, resume the story from that state.
+- Adjudicate risky actions honestly against realm gaps and stats; success thresholds scale with realm. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
+- Meditation can trigger time skips of months to decades. The Dragon & Phoenix Festival (geniuses under 20) and the decennial Grand Azure Tournament (ages 20–100) are pivotal events; death in a tournament is a permanent Game Over — announce it and end the story.
+
+Tone: serious, epic, and philosophical. Pacing: very slow — emphasize the passage of years. Difficulty: high — death or permanent injury are common results of recklessness.` },
   { id:'starfall', emoji:'🚀', genre:'Sci-Fi', title:'Starfall Salvage',
     blurb:'Your junker crew found a derelict warship that should not exist. Something inside is still on.',
     prompt:'Hard sci-fi salvage adventure. The player captains a small, indebted salvage ship on the rim of settled space. They have just docked with a derelict military vessel missing for 80 years — its reactor is warm, and its logs are wrong.' },
@@ -279,7 +301,10 @@ let game = null;          // { id, title, systemPrompt, messages:[{role, content
 let mode = 'do';
 let streaming = false;
 
-const getKey   = () => store.getItem(LS.key) || '';
+// strip whitespace/invisible characters — a stray one in a header makes Safari's
+// fetch throw a bare "TypeError: Type error" before the request is even sent
+const cleanKey = k => (k || '').replace(/[^\x21-\x7E]/g, '');
+const getKey   = () => cleanKey(store.getItem(LS.key));
 const getModel = () => store.getItem(LS.model) || 'claude-opus-5';
 const getSaves = () => JSON.parse(store.getItem(LS.saves) || '{}');
 const putSave  = g => { try { const s = getSaves(); s[g.id] = g; store.setItem(LS.saves, JSON.stringify(s)); } catch {} };
@@ -293,7 +318,7 @@ Scenario: ${scenario}
 ${tone ? `Tone: ${tone}` : ''}
 
 Rules of play:
-- Write vivid second-person narration ("you"). Keep each response to 2–4 short paragraphs, then stop at a natural decision point. Never write the player's actions, choices, or dialogue for them.
+- Write vivid second-person narration ("you"). Keep each response to 2–4 short paragraphs (plus any status display the scenario requires), then stop at a natural decision point. Never write the player's actions, choices, or dialogue for them.
 - The world is persistent and consistent. NPCs have their own goals and memories. Actions have consequences that carry forward.
 - Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [STORY] is narration the player adds to the world (accept it and weave it in).
 - Player actions can fail. Judge success by plausibility, established abilities, and dramatic stakes — bold risky moves should sometimes go wrong in interesting ways. Never let failure be a dead end.
@@ -587,7 +612,9 @@ async function runGM(newMessages) {
     maybeReplan(g);
   } catch (err) {
     gmDiv.className = 'turn error';
-    gmDiv.textContent = err.message;
+    gmDiv.textContent = (err.name === 'TypeError')
+      ? 'Could not reach the Game Master. Check your internet connection — and re-paste your API key in Settings; a hidden space or line break in the key causes exactly this error.'
+      : (err.message || 'Something went wrong. Please try again.');
     // roll back the player turn so it can be retried
     g.messages = g.messages.slice(0, g.messages.length - newMessages.length);
   } finally {
@@ -598,15 +625,28 @@ async function runGM(newMessages) {
 }
 
 /* ================= settings & modals ================= */
+const getSize = () => store.getItem('qf_size') || '16';
+const getFont = () => store.getItem('qf_font') || 'serif';
+function applyPrefs() {
+  const root = document.documentElement.style;
+  root.setProperty('--story-size', getSize() + 'px');
+  root.setProperty('--story-font', getFont() === 'sans' ? 'var(--sans)' : 'var(--serif)');
+}
+
 function openSettings() {
   document.getElementById('set-key').value = getKey();
   document.getElementById('set-model').value = getModel();
+  document.getElementById('set-size').value = getSize();
+  document.getElementById('set-font').value = getFont();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 function saveSettings() {
-  store.setItem(LS.key, document.getElementById('set-key').value.trim());
+  store.setItem(LS.key, cleanKey(document.getElementById('set-key').value));
   store.setItem(LS.model, document.getElementById('set-model').value);
+  store.setItem('qf_size', document.getElementById('set-size').value);
+  store.setItem('qf_font', document.getElementById('set-font').value);
+  applyPrefs();
   closeSettings();
   renderHome();
 }
@@ -618,6 +658,7 @@ document.querySelectorAll('.modal-backdrop').forEach(b => {
 });
 
 renderHome();
+applyPrefs();
 
 /* PWA: register service worker (requires https or localhost) */
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
