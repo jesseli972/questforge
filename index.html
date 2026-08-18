@@ -480,7 +480,7 @@ const PROMPT_RULE = `- End every response by prompting the player, in one of two
   CHOICE (only at genuine branch points — irreversible decisions, a scene closing onto several distinct paths, tournament crossroads, or a player who seems stuck): 3–4 numbered options, concrete and meaningfully different, at least one bold or risky, plus a brief note that anything else is allowed. A bare number reply picks that option.
   If the canonical state sheet ends with a NEXT PROMPT recommendation, follow it unless the player's latest input clearly demands the other style.`;
 
-const DICE_RULE = `- Dice: for any non-trivial action with a real chance of failure — combat, persuasion, stealth, theft, breakthroughs — call the roll_dice tool BEFORE narrating the outcome. Set the die size and the mixed/success thresholds honestly from the difficulty and the character's current abilities, then narrate strictly according to the returned outcome. Never soften a failure into a success, and never roll for trivial actions.`;
+const DICE_RULE = `- Dice: for any non-trivial action with a real chance of failure — combat, persuasion, stealth, theft, breakthroughs — call the roll_dice tool BEFORE narrating the outcome. Set the die size and the mixed/success thresholds honestly from the difficulty and the character's current abilities, then narrate strictly according to the returned outcome. Never soften a failure into a success, and never roll for trivial actions. Roll AT MOST ONCE per player turn: pick the single most pivotal uncertainty and let its outcome color the lesser risks in the narration.`;
 
 function buildSystemPrompt(scenario, tone, hasOpening) {
   return `You are the Game Master of an interactive text adventure. You run the world; the player controls only their own character.
@@ -889,15 +889,36 @@ function apiHeaders() {
   };
 }
 
-function systemTextFor(g) {
-  let t = g.systemPrompt;
-  if (g.state) {
-    t += `\n\nCANONICAL GAME STATE — the authoritative record of established facts (it may lag one turn behind the story). Never contradict it; when narrating, rely on it rather than re-inferring facts from old scenes:\n${g.state}`;
+/* ---- context windowing ----
+   Cost control: only the last WINDOW messages ride along verbatim; everything
+   older is represented by the Scribe's canonical state sheet. This makes
+   per-turn cost flat and bounded no matter how long the game runs. */
+const WINDOW = 16;
+
+function windowMessages(g) {
+  const msgs = g.messages;
+  if (msgs.length <= WINDOW) return msgs;
+  let start = msgs.length - WINDOW;
+  // the window must open on a plain user message — never on an assistant turn,
+  // and never on a tool_result (its matching tool_use would be missing)
+  while (start < msgs.length) {
+    const m = msgs[start];
+    const isToolResult = Array.isArray(m.content) && m.content.some(b => b.type === 'tool_result');
+    if (m.role === 'user' && !isToolResult) break;
+    start++;
   }
-  if (g.director?.brief) {
-    t += `\n\nSECRET STORY PLAN from the Story Director. Steer the narrative toward these beats at a natural pace, adapting freely when the player surprises you. Never reveal, quote, or hint that a plan exists:\n${g.director.brief}`;
-  }
-  return t;
+  if (start >= msgs.length) start = msgs.length - 1;
+  return msgs.slice(start);
+}
+
+/* Volatile per-turn context (state sheet, story plan) rides in a message so the
+   system prompt stays byte-stable and cacheable. */
+function contextBlock(g) {
+  let t = '';
+  if (g.state) t += `CANONICAL GAME STATE — the authoritative record of established facts (it may lag one turn behind). Never contradict it; rely on it rather than re-inferring facts from old scenes:\n${g.state}`;
+  if (g.director?.brief) t += `${t ? '\n\n' : ''}SECRET STORY PLAN from the Story Director. Steer toward these beats at a natural pace, adapting freely when the player surprises you. Never reveal, quote, or hint that a plan exists:\n${g.director.brief}`;
+  if (g.messages.length > WINDOW) t += `${t ? '\n\n' : ''}NOTE: earlier scenes are omitted from this transcript. The state sheet above is the authoritative record of everything that happened in them.`;
+  return t ? `<engine-context>\n${t}\n</engine-context>\n(Engine context for the Game Master — not a message from the player. Do not acknowledge it.)` : '';
 }
 
 /* ---- canonical state: a scribe model keeps the character sheet & world facts ---- */
@@ -1048,17 +1069,19 @@ function makeGmDiv(box) {
 }
 
 /* One streamed narrator request; collects text and tool_use blocks */
-async function streamNarration(g, gmDiv, box) {
+async function streamNarration(g, gmDiv, box, allowDice = true) {
   const cfg = engineConfig();
+  const ctx = contextBlock(g);
   const body = {
     model: cfg.narrator,
     max_tokens: 8000, // hard cap on thinking + narration; generous so scenes never truncate
     stream: true,
-    cache_control: { type: 'ephemeral' }, // auto-caches the whole conversation prefix
-    system: systemTextFor(g),
+    // static ruleset is the cached prefix; 1h TTL survives casual mobile pacing
+    system: [{ type: 'text', text: g.systemPrompt, cache_control: { type: 'ephemeral', ttl: '1h' } }],
     tools: [DICE_TOOL],
-    messages: g.messages,
+    messages: [...(ctx ? [{ role: 'user', content: ctx }] : []), ...windowMessages(g)],
   };
+  if (!allowDice) body.tool_choice = { type: 'none' };   // one roll per turn, enforced
   if (supportsEffort(cfg.narrator)) body.output_config = { effort: 'low' };
 
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1153,9 +1176,9 @@ async function runGM(newMessages, draftText) {
       gmDiv.innerHTML = '<span class="thinking-dots">The Game Master is weaving the tale…</span>';
     }
 
-    // narrate → roll requested dice → narrate the outcome → … (bounded)
-    for (let hop = 0; hop < 5; hop++) {
-      const { blocks, text, stopReason } = await streamNarration(g, gmDiv, box);
+    // narrate → roll requested dice → narrate the outcome (one roll per turn)
+    for (let hop = 0; hop < 3; hop++) {
+      const { blocks, text, stopReason } = await streamNarration(g, gmDiv, box, hop === 0);
 
       if (stopReason === 'tool_use' && blocks.some(b => b.type === 'tool_use')) {
         g.messages.push({ role: 'assistant', content: blocks });
