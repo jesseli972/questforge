@@ -296,6 +296,8 @@
 <div id="sheet-modal" class="modal-backdrop hidden">
   <div class="modal">
     <h2>📜 This game</h2>
+    <label>Usage &amp; cost</label>
+    <pre id="sheet-usage" style="white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; line-height:1.65; margin-top:10px; color:var(--text-dim);"></pre>
     <label>Character sheet</label>
     <p class="hint">Maintained by the Scribe after each turn — the story's canonical record.</p>
     <pre id="sheet-body" style="white-space:pre-wrap; font-family:var(--sans); font-size:14px; line-height:1.6; margin-top:10px; color:var(--text);"></pre>
@@ -456,6 +458,7 @@ const store = (() => {
   catch { const m = {}; return { getItem:k => m[k] ?? null, setItem:(k,v) => { m[k]=v; }, removeItem:k => { delete m[k]; } }; }
 })();
 let game = null;          // { id, title, systemPrompt, messages:[{role, content}], updated }
+let pendingDesignUsage = null;  // designer cost, attributed once the game exists
 let mode = 'do';
 let streaming = false;
 
@@ -576,7 +579,27 @@ function showPlay() {
   document.getElementById('btn-sheet').classList.remove('hidden');
 }
 
+function usageReport(g) {
+  const u = g?.usage;
+  const life = parseFloat(store.getItem('qf_life_cost') || '0');
+  if (!u || !u.calls || !(u.calls.narrator || u.calls.designer)) {
+    return `This game:  no turns recorded yet\nAll games:  ${money(life)}\n\nCosts are estimates at list prices.`;
+  }
+  const scenes = u.calls.narrator, avg = scenes ? u.cost / scenes : 0;
+  const rows = [
+    `This game:  ${money(u.cost)}  ·  ${scenes} narration call${scenes === 1 ? '' : 's'}  ·  ~${money(avg)}/call`,
+    `Tokens:     ${kTok(u.out)} out · ${kTok(u.cacheRead)} cached in · ${kTok(u.in)} fresh in`,
+    `Calls:      narrator ${u.calls.narrator} · director ${u.calls.director || 0} · scribe ${u.calls.scribe || 0}${u.calls.designer ? ' · designer 1' : ''}`,
+    `All games:  ${money(life)}`,
+  ];
+  const saved = u.cacheRead * 0.9;   // cached input bills at 10% of the normal rate
+  if (saved > 0) rows.push(`Caching saved roughly ${kTok(Math.round(saved))} tokens' worth of input cost.`);
+  rows.push('', 'Estimates at list prices; your invoice is the real number.');
+  return rows.join('\n');
+}
+
 function openSheet() {
+  document.getElementById('sheet-usage').textContent = usageReport(game);
   document.getElementById('sheet-body').textContent =
     game?.state || 'The Scribe hasn\'t written anything yet — play a turn first.';
   // older saves have no stored scenario; fall back to the full system prompt
@@ -650,8 +673,18 @@ function startAdventure(title, scenario, tone, opening, setup, brief) {
     tone: tone || '',
     hasOpening: !!opening,
     messages: [],
+    usage: blankUsage(),
     updated: Date.now(),
   };
+  if (pendingDesignUsage) {
+    // designer cost belongs to this game; lifetime already counted it
+    const acc = game.usage;
+    const u = pendingDesignUsage.usage || {};
+    acc.cost += costOf(pendingDesignUsage.model, u);
+    acc.in += u.input_tokens || 0; acc.out += u.output_tokens || 0;
+    acc.calls.designer = 1;
+    pendingDesignUsage = null;
+  }
   showPlay();
   if (opening) {
     // scripted prologue: identical every run, shown instantly, no API call
@@ -707,6 +740,9 @@ Rules: honor everything the player specified — never contradict or water down 
     throw new Error(msg);
   }
   const data = await resp.json();
+  // no game exists yet — hold it and fold into the game once it's created
+  pendingDesignUsage = { model: 'claude-opus-5', usage: data.usage };
+  addUsage({ usage: blankUsage() }, 'designer', 'claude-opus-5', data.usage);  // counts toward lifetime
   if (data.stop_reason === 'refusal') throw new Error('The Game Designer declined this premise. Try rewording it.');
   const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
   if (!text) throw new Error('The Game Designer returned nothing. Try again.');
@@ -802,6 +838,46 @@ function engineConfig() {
   return { narrator: m, planner: null };
 }
 const supportsEffort = model => model !== 'claude-haiku-4-5'; // effort param 400s on Haiku 4.5
+
+/* ---- usage & cost accounting ----
+   Standard list prices per million tokens. Cache reads bill at 0.1x input,
+   cache writes at 1.25x. Intro discounts are ignored, so figures read slightly
+   high rather than under-reporting what you'll actually be charged. */
+const PRICES = {
+  'claude-opus-5':   { in: 5,  out: 25 },
+  'claude-sonnet-5': { in: 3,  out: 15 },
+  'claude-haiku-4-5':{ in: 1,  out: 5  },
+};
+
+function costOf(model, u) {
+  const p = PRICES[model] || PRICES['claude-opus-5'];
+  return ((u.input_tokens || 0) * p.in
+    + (u.cache_read_input_tokens || 0) * p.in * 0.1
+    + (u.cache_creation_input_tokens || 0) * p.in * 1.25
+    + (u.output_tokens || 0) * p.out) / 1e6;
+}
+
+const blankUsage = () => ({ cost: 0, in: 0, cacheRead: 0, cacheWrite: 0, out: 0, calls: { narrator: 0, director: 0, scribe: 0, designer: 0 } });
+
+function addUsage(target, role, model, u) {
+  if (!target || !u) return 0;
+  const acc = target.usage || (target.usage = blankUsage());
+  if (!acc.calls) acc.calls = { narrator: 0, director: 0, scribe: 0, designer: 0 };
+  const c = costOf(model, u);
+  acc.cost += c;
+  acc.in += u.input_tokens || 0;
+  acc.cacheRead += u.cache_read_input_tokens || 0;
+  acc.cacheWrite += u.cache_creation_input_tokens || 0;
+  acc.out += u.output_tokens || 0;
+  acc.calls[role] = (acc.calls[role] || 0) + 1;
+  // lifetime total across all games, kept separately from per-game figures
+  const life = parseFloat(store.getItem('qf_life_cost') || '0') + c;
+  store.setItem('qf_life_cost', String(life));
+  return c;
+}
+
+const money = n => n < 0.01 && n > 0 ? '<$0.01' : '$' + n.toFixed(2);
+const kTok = n => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
 const PLAN_EVERY = 8; // player turns between Director plan updates
 
 function apiHeaders() {
@@ -853,6 +929,7 @@ async function updateState(g) {
     });
     if (!resp.ok) return;
     const data = await resp.json();
+    addUsage(g, 'scribe', 'claude-haiku-4-5', data.usage);
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     if (text) { g.state = text; putSave(g); }
   } catch { /* non-fatal: sheet lags a turn */ }
@@ -879,6 +956,7 @@ async function planStory(g) {
   });
   if (!resp.ok) throw new Error('Story Director error (' + resp.status + ')');
   const data = await resp.json();
+  addUsage(g, 'director', engineConfig().planner, data.usage);
   if (data.stop_reason === 'refusal') throw new Error('Director declined');
   const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
   if (!text) throw new Error('Empty plan');
@@ -997,6 +1075,7 @@ async function streamNarration(g, gmDiv, box) {
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '', text = '', started = false, stopReason = null, curTool = null;
+  let usage = {};
   const blocks = [];
 
   const feed = ev => {
@@ -1022,8 +1101,12 @@ async function streamNarration(g, gmDiv, box) {
         blocks.push({ type: 'tool_use', id: curTool.id, name: curTool.name, input });
         curTool = null;
       }
+    } else if (ev.type === 'message_start') {
+      // input/cache counts arrive here; output_tokens is finalized in message_delta
+      if (ev.message?.usage) usage = { ...ev.message.usage };
     } else if (ev.type === 'message_delta') {
       if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
+      if (ev.usage?.output_tokens != null) usage.output_tokens = ev.usage.output_tokens;
     } else if (ev.type === 'error') {
       throw new Error(ev.error?.message || 'Stream error');
     }
@@ -1043,6 +1126,7 @@ async function streamNarration(g, gmDiv, box) {
     }
   }
 
+  addUsage(g, 'narrator', cfg.narrator, usage);
   if (stopReason === 'refusal') throw new Error('The model declined to continue this scene. Try a different action.');
   return { blocks: blocks.filter(b => b.type !== 'text' || b.text.trim()), text, stopReason };
 }
