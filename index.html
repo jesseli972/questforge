@@ -188,6 +188,23 @@
   .dice .outcome.failure { color: var(--danger); }
   .dice .thr { color: var(--text-dim); font-size: 11.5px; }
 
+  .end-card {
+    border: 1px solid var(--accent); border-radius: 12px; padding: 20px 18px;
+    margin: 6px 0 22px; text-align: center; background: var(--bg-2);
+    font-family: var(--sans);
+  }
+  .end-card.death { border-color: var(--danger); }
+  .end-card.victory { border-color: #8fbf72; }
+  .end-head { font-family: var(--serif); font-size: 20px; color: var(--accent); letter-spacing: .02em; }
+  .end-card.death .end-head { color: var(--danger); }
+  .end-card.victory .end-head { color: #8fbf72; }
+  .end-cause { margin-top: 8px; font-size: 15px; color: var(--text); }
+  .end-epitaph { margin-top: 10px; font-family: var(--serif); font-style: italic; color: var(--text-dim); font-size: 15px; }
+  .end-stats { margin-top: 12px; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; }
+  .end-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+  .save-row.ended .title { color: var(--text-dim); }
+  .save-row .ended-tag { font-size: 11px; color: var(--danger); text-transform: uppercase; letter-spacing: .07em; }
+
   .jump-latest {
     position: absolute; left: 50%; transform: translateX(-50%);
     bottom: 12px; z-index: 5; font-size: 13px; padding: 7px 15px;
@@ -398,6 +415,14 @@ Mechanics to enforce every turn:
 - Use the roll_dice tool for risky actions, with thresholds set from realm gaps and stats; success thresholds scale with Realm progression. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
 - Meditation can trigger time skips of months to decades. The Dragon & Phoenix Festival (geniuses under 20) and the decennial Grand Azure Tournament (ages 20–100) are pivotal events; death in a tournament is a permanent Game Over — announce it and end the story.
 
+WORLD TIMELINE — these events happen on schedule whether or not the player is involved, and the story must revolve around them. Track the years as they pass and reference the approaching event in the narration; NPCs prepare for them, factions maneuver around them, and the player is drawn toward them. Do not invent a different central plot.
+- Every year: the Dragon & Phoenix Festival, the realm-wide competition for geniuses under 20. The player is 17 at the start, so they have roughly four chances to compete before aging out — each one a hard deadline that shapes their training. Placing well brings patronage, resources, and enemies.
+- Year 3: a Mystical Realm opens under a celestial alignment. Every faction sends its best young disciples; the player is expected to go. Inside are techniques, treasures, and rivals with no witnesses.
+- Year 5: open war breaks out between the Martial Alliance and the Demonic Sect. Neutral clans are forced to choose sides. Whatever the player has built is threatened; whoever they have befriended is conscripted.
+- Year 8: the Grand Azure Tournament, the decennial contest for cultivators aged 20-100 and the largest stage in the realm. Death here is permanent and public.
+- Year 10 onward: the Heavenly Demon returns. Signs escalate from year 1 — massacred sects, a black star, the Demonic Sect's growing boldness — and their return reshapes the realm. This is the campaign's endgame.
+Anchor every arc to the next event on this list. When the player skips time, advance to the next scheduled event and open there.
+
 Tone: serious, epic, and philosophical. PACING DIRECTIVE — ANIME: run this like a shonen cultivation anime, not a web novel. The player only plays fights, tournaments, breakthroughs, discoveries, and charged confrontations; everything between is a hard-cut montage. Escalate in arcs — each arc a stronger rival, a deeper secret, a bigger stage. End scenes on hooks. Power-ups land with drama: name the technique, show the gap it closes. Years may pass in a single sentence; a decisive exchange of blows may deserve a whole scene. Difficulty: high — death or permanent injury are common results of recklessness.`,
     opening: `# LOG 00 — Prologue
 
@@ -568,7 +593,7 @@ function renderHome() {
     const el = document.createElement('div');
     el.className = 'card';
     el.innerHTML = `<div class="emoji">${a.emoji}</div><div class="genre">${a.genre}</div><h3>${a.title}</h3><p>${a.blurb}</p>`;
-    el.onclick = () => startAdventure(a.title, a.prompt, null, a.opening, a.setup);
+    el.onclick = () => startAdventure(a.title, a.prompt, null, a.opening, a.setup, null, false, a.id);
     grid.appendChild(el);
   }
 
@@ -580,11 +605,13 @@ function renderHome() {
     const row = document.createElement('div');
     row.className = 'save-row';
     const turns = s.messages.filter(m => m.role === 'user').length;
+    const endTag = s.ended ? `<span class="ended-tag">${s.ended.outcome === 'victory' ? '🏆 completed' : '⚰️ ended'}</span> · ` : '';
+    if (s.ended) row.classList.add('ended');
     row.innerHTML = `<div class="meta"><div class="title">${escapeHtml(s.title)}</div>
-      <div class="sub">${turns} turn${turns===1?'':'s'} · ${new Date(s.updated).toLocaleString()}</div></div>`;
+      <div class="sub">${endTag}${turns} turn${turns===1?'':'s'} · ${new Date(s.updated).toLocaleString()}</div></div>`;
     const actions = document.createElement('div');
     actions.className = 'actions';
-    const cont = document.createElement('button'); cont.className='primary'; cont.textContent='Continue';
+    const cont = document.createElement('button'); cont.className='primary'; cont.textContent = s.ended ? 'Read' : 'Continue';
     cont.onclick = () => resumeGame(s.id);
     const del = document.createElement('button'); del.className='danger'; del.textContent='Delete';
     del.onclick = () => { if (confirm('Delete this save?')) delSave(s.id); };
@@ -717,11 +744,13 @@ function renderStory() {
     else { div.className = 'turn player'; div.textContent = m.content.replace(/^\[(DO|SAY|STORY)\]\s*/, ''); }
     box.appendChild(div);
   }
+  if (game.ended) box.appendChild(endCard(game));
+  lockComposer(!!game.ended);
   box.scrollTop = box.scrollHeight;
 }
 
 /* ================= game flow ================= */
-function startAdventure(title, scenario, tone, opening, setup, brief, mature) {
+function startAdventure(title, scenario, tone, opening, setup, brief, mature, presetId) {
   if (!requireKey()) return;
   // per-game random facts (e.g. Azure Heavens' rolled spirit root) get baked
   // into this game's rules at creation so they stay fixed for its whole life
@@ -735,6 +764,7 @@ function startAdventure(title, scenario, tone, opening, setup, brief, mature) {
     tone: tone || '',
     hasOpening: !!opening,
     mature: !!mature,
+    presetId: presetId || '',
     messages: [],
     usage: blankUsage(),
     updated: Date.now(),
@@ -880,6 +910,18 @@ function migrateRules(g) {
   for (const [oldText, newText] of RULE_MIGRATIONS) {
     if (g.systemPrompt.includes(oldText)) { g.systemPrompt = g.systemPrompt.replace(oldText, newText); changed = true; }
   }
+  // Azure Heavens saves predating the fixed world timeline: graft it on so the
+  // story stops wandering. Anchored to their current year, not year zero.
+  if (g.systemPrompt.includes('Azure Heavens') && g.systemPrompt.includes('Cultivation Panel')
+      && !g.systemPrompt.includes('WORLD TIMELINE')) {
+    const azure = ADVENTURES.find(a => a.id === 'azure');
+    const tl = azure && azure.prompt.match(/WORLD TIMELINE[\s\S]*?open there\./);
+    if (tl) {
+      g.systemPrompt += '\n\n' + tl[0] + '\n(This timeline was added mid-campaign: treat the story\'s current year as the reference point and run the remaining events forward from there.)';
+      if (g.scenario) g.scenario += '\n\n' + tl[0];
+      changed = true;
+    }
+  }
   if (!g.systemPrompt.includes('roll_dice')) { g.systemPrompt += '\n\nAdditional rule:\n' + DICE_RULE; changed = true; }
   if (!g.systemPrompt.includes('[SKIP]')) { g.systemPrompt += '\n\nAdditional rules:\n' + PACING_RULE; changed = true; }
   if (changed) putSave(g);
@@ -903,7 +945,7 @@ function setMode(m) {
 }
 
 function sendTurn() {
-  if (streaming || !game) return;
+  if (streaming || !game || game.ended) return;
   const input = document.getElementById('player-input');
   const text = input.value.trim();
   if (!text && mode !== 'skip') return;   // Skip works with no text
@@ -1100,7 +1142,7 @@ async function planStory(g) {
       max_tokens: 4000,
       output_config: { effort: 'low' },
       cache_control: { type: 'ephemeral' },
-      system: `You are the Story Director for an interactive text adventure. You never write narration. You write a compact hidden plan (under 300 words) for the narrator to follow: the main arc and current act, 2–3 NPC secrets and motivations, one planned twist, active threats, and pacing guidance for the next few scenes. Structure the plan as escalating arcs, like a season of an action series — each arc a stronger opponent, a deeper secret, a bigger stage, with a clear milestone the player can win.\n\nThe adventure's premise and rules:\n${g.systemPrompt}`,
+      system: `You are the Story Director for an interactive text adventure. You never write narration. You write a compact hidden plan (under 300 words) for the narrator to follow: the main arc and current act, 2–3 NPC secrets and motivations, one planned twist, active threats, and pacing guidance for the next few scenes. Structure the plan as escalating arcs, like a season of an action series — each arc a stronger opponent, a deeper secret, a bigger stage, with a clear milestone the player can win. If the premise defines a WORLD TIMELINE of scheduled events, anchor every arc to the next one on it and say which event the current arc is building toward — never invent a competing central plot.\n\nThe adventure's premise and rules:\n${g.systemPrompt}`,
       messages: [{ role: 'user', content: ask }],
     }),
   });
@@ -1127,6 +1169,20 @@ function maybeReplan(g) {
 }
 
 /* ---- dice ---- */
+const END_TOOL = {
+  name: 'end_game',
+  description: "Call this the moment the story is truly over — the player's character has died, or the campaign has reached a genuine ending (triumph, ascension, retirement, damnation). Narrate the final moments in your text FIRST, then call this tool as your last act. Never call it for a setback, a defeat the character survives, or a cliffhanger.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      outcome: { type: 'string', enum: ['death', 'victory', 'ending'], description: 'death = the character died; victory = they achieved the campaign\'s central goal; ending = the story concluded some other way' },
+      cause: { type: 'string', description: 'One line naming what ended it, e.g. "Slain by Senior Brother Kang in the Dragon & Phoenix Festival final"' },
+      epitaph: { type: 'string', description: 'One short, evocative closing line about this character — the sentence the world would remember them by' },
+    },
+    required: ['outcome', 'cause', 'epitaph'],
+  },
+};
+
 const DICE_TOOL = {
   name: 'roll_dice',
   description: 'Roll a die for a non-trivial action whose outcome is uncertain. You must set the thresholds BEFORE knowing the roll, honestly, from the difficulty of the action and the character\'s current abilities. The app rolls the die and returns the result; narrate strictly according to the outcome.',
@@ -1190,6 +1246,53 @@ function syncJumpBtn() {
 }
 document.getElementById('story').addEventListener('scroll', syncJumpBtn, { passive: true });
 
+/* ---- endings ---- */
+const OUTCOME_META = {
+  death:   { icon: '⚰️', label: 'The story ends' },
+  victory: { icon: '🏆', label: 'Victory' },
+  ending:  { icon: '📖', label: 'The story ends' },
+};
+
+function endCard(g) {
+  const e = g.ended, meta = OUTCOME_META[e.outcome] || OUTCOME_META.ending;
+  const turns = g.messages.filter(m => typeof m.content === 'string' && m.role === 'user' && !m.content.startsWith('[STORY] Begin')).length;
+  const realm = (g.state || '').match(/^.*(?:Realm|Rank|Level|Stage)\s*[:&].*$/im)?.[0]?.trim().slice(0, 60);
+  const el = document.createElement('div');
+  el.className = 'end-card ' + e.outcome;
+  el.innerHTML =
+    `<div class="end-head">${meta.icon} ${meta.label}</div>` +
+    (e.cause ? `<div class="end-cause">${escapeHtml(e.cause)}</div>` : '') +
+    (e.epitaph ? `<div class="end-epitaph">“${escapeHtml(e.epitaph)}”</div>` : '') +
+    `<div class="end-stats">${turns} turn${turns === 1 ? '' : 's'}${realm ? ' · ' + escapeHtml(realm) : ''}</div>`;
+  const row = document.createElement('div');
+  row.className = 'end-actions';
+  const again = document.createElement('button');
+  again.className = 'primary';
+  again.textContent = '↻ New life in this world';
+  again.onclick = () => restartWorld(g);
+  const lib = document.createElement('button');
+  lib.textContent = '← Library';
+  lib.onclick = goHome;
+  row.append(again, lib);
+  el.appendChild(row);
+  return el;
+}
+
+function lockComposer(locked) {
+  document.getElementById('player-input').disabled = locked;
+  document.getElementById('send-btn').disabled = locked;
+  document.querySelectorAll('.mode-btn').forEach(b => b.disabled = locked);
+  document.getElementById('player-input').placeholder = locked
+    ? 'This story has ended.' : 'What do you do?';
+}
+
+/* Start a fresh run in the same world — presets re-roll their random character */
+function restartWorld(g) {
+  const preset = ADVENTURES.find(a => a.id === g.presetId);
+  if (preset) startAdventure(preset.title, preset.prompt, g.tone, preset.opening, preset.setup, g.brief, g.mature);
+  else startAdventure(g.title, g.scenario || g.systemPrompt, g.tone, null, null, g.brief, g.mature);
+}
+
 function makeGmDiv(box) {
   const stick = nearBottom(box);
   const d = document.createElement('div');
@@ -1210,7 +1313,7 @@ async function streamNarration(g, gmDiv, box, allowDice = true) {
     stream: true,
     // static ruleset is the cached prefix; 1h TTL survives casual mobile pacing
     system: [{ type: 'text', text: g.systemPrompt, cache_control: { type: 'ephemeral', ttl: '1h' } }],
-    tools: [DICE_TOOL],
+    tools: [DICE_TOOL, END_TOOL],
     messages: [...(ctx ? [{ role: 'user', content: ctx }] : []), ...windowMessages(g)],
   };
   if (!allowDice) body.tool_choice = { type: 'none' };   // one roll per turn, enforced
@@ -1318,8 +1421,14 @@ async function runGM(newMessages, draftText) {
         g.messages.push({ role: 'assistant', content: blocks });
         const stick = nearBottom(box);
         const results = [];
+        let ended = null;
         for (const b of blocks) {
           if (b.type !== 'tool_use') continue;
+          if (b.name === 'end_game') {
+            ended = { outcome: b.input?.outcome || 'ending', cause: b.input?.cause || '', epitaph: b.input?.epitaph || '', at: Date.now() };
+            results.push({ type: 'tool_result', tool_use_id: b.id, content: 'acknowledged' });
+            continue;
+          }
           const r = rollDice(g, b.input);
           const d = document.createElement('div');
           d.className = 'dice';
@@ -1328,6 +1437,12 @@ async function runGM(newMessages, draftText) {
           results.push({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(r) });
         }
         g.messages.push({ role: 'user', content: results });
+        if (ended) {
+          g.ended = ended;
+          box.appendChild(endCard(g));
+          if (stick) box.scrollTop = box.scrollHeight;
+          break;
+        }
         if (text.trim()) gmDiv = makeGmDiv(box);        // keep the narration segment, open a new one
         else box.appendChild(gmDiv);                    // move the placeholder below the dice
         if (stick) box.scrollTop = box.scrollHeight;
@@ -1341,6 +1456,7 @@ async function runGM(newMessages, draftText) {
 
     g.updated = Date.now();
     putSave(g);
+    if (g.ended) { lockComposer(true); return; }   // story over — no scribe, no replan
     updateState(g);   // scribe refreshes the canonical sheet in the background
     maybeReplan(g);
   } catch (err) {
@@ -1357,9 +1473,13 @@ async function runGM(newMessages, draftText) {
     }
   } finally {
     streaming = false;
-    document.getElementById('send-btn').disabled = false;
+    // a finished story stays locked — don't hand the controls back
+    if (g.ended) lockComposer(true);
+    else {
+      document.getElementById('send-btn').disabled = false;
+      document.getElementById('player-input').focus();
+    }
     syncJumpBtn();
-    document.getElementById('player-input').focus();
   }
 }
 
