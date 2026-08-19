@@ -205,6 +205,13 @@
   .save-row.ended .title { color: var(--text-dim); }
   .save-row .ended-tag { font-size: 11px; color: var(--danger); text-transform: uppercase; letter-spacing: .07em; }
 
+  .continue-btn {
+    width: 100%; margin-bottom: 10px; padding: 11px;
+    background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent);
+    font-size: 15px; font-weight: 600; border-radius: 10px; font-family: var(--sans);
+  }
+  .continue-btn:hover { background: var(--accent); color: #1a1509; }
+
   .jump-latest {
     position: absolute; left: 50%; transform: translateX(-50%);
     bottom: 12px; z-index: 5; font-size: 13px; padding: 7px 15px;
@@ -258,6 +265,7 @@
   <div class="story" id="story"></div>
   <div class="composer" style="position:relative;">
     <button id="jump-latest" class="jump-latest hidden" onclick="jumpToLatest()">↓ Latest</button>
+    <button id="continue-btn" class="continue-btn" onclick="continueStory()">▶ Continue the story</button>
     <div class="mode-row">
       <button class="mode-btn active" data-mode="do" onclick="setMode('do')">Do</button>
       <button class="mode-btn" data-mode="say" onclick="setMode('say')">Say</button>
@@ -409,7 +417,7 @@ const ADVENTURES = [
 The player is a transmigrated soul from modern Earth who wakes in this brutal world. The prologue has already been shown to the player as your first message, ending in a choice of four STARTING LOCATIONS. Their first reply selects one (a number, or a custom starting point they describe). The player chooses only WHERE they begin — their spirit root and Innate Constitution were already rolled by fate and appear below as immutable facts. Open LOG 01-A at the chosen location and reveal the rolled root and constitution dramatically as the Cultivation Panel finishes initializing, then show the full Panel. Spirit root tiers: Heavenly single roots are genius-tier (2–3x speed); True double/triple roots are strong; four/five mixed roots are slow "trash" roots; Mutant roots (Lightning, Ice, Wind, Darkness) grant unique combat abilities; Chaos/Void roots are vanishingly rare. Root quality ranks: Mortal, Low, Intermediate, High, Supreme/Stainless.
 
 Mechanics to enforce every turn:
-- The Panel: display it ONLY when one of its values actually changed this turn (realm or stage, qi, lifespan, a physical stat, a technique or its mastery, constitution) — or when the player asks to see it. On every other turn, omit it entirely and let the prose carry the scene; mention a change in a clause instead ("your qi settles past the halfway mark") when it is minor. When you do print it, use this compact fixed format: Realm & Stage, Qi Saturation, Lifespan, Physical Temple (Strength/Agility/Constitution), Cultivation Technique (only one active; switching to a clashing technique risks severe Qi Deviation), Martial Techniques with mastery (Beginner/Intermediate/Greater/Perfect), and Innate Constitution. Values change; categories never do — never add or remove Panel fields.
+- The Panel: never print the whole block. Print only the 2–4 lines that changed this turn or bear directly on the moment — omit it entirely on turns where nothing changed, and fold minor shifts into the prose instead ("your qi settles past the halfway mark"). Print the full Panel only when the player asks for it. Draw lines from this fixed set, never inventing new ones: Realm & Stage, Qi Saturation, Lifespan, Physical Temple (Strength/Agility/Constitution), Cultivation Technique (only one active; switching to a clashing technique risks severe Qi Deviation), Martial Techniques with mastery (Beginner/Intermediate/Greater/Perfect), Innate Constitution, Active Quest.
 - Realms in order: Qi Refining, Foundation Establishment, Core Formation, Golden Core, Nascent Soul, Void Refining, Half-Immortal, Earth Immortal, Heavenly Immortal — each with Early/Mid/Late/Peak stages. Qi requirements double per minor stage and increase 5x per major realm. Breakthroughs can fail, causing Qi Deviation or death.
 - Label every scene with a Log ID (LOG 01-A, LOG 01-B, ...). If the player asks to revert to a Log ID, resume the story from that state.
 - Use the roll_dice tool for risky actions, with thresholds set from realm gaps and stats; success thresholds scale with Realm progression. Power scaling: minor sect elders cap at Golden Core; superpower clan and sect elders are typically Void Refining; living legends are Half-Immortal.
@@ -537,10 +545,14 @@ const PACING_RULE = `- Pacing — this is a game, not a novel. Every scene the p
 
 const MATURE_RULE = `- Mature content: this game is for an adult player and adult themes are in scope. Do not sanitize the story — violence, cruelty, moral compromise, addiction, grief, and desire all belong here when the narrative earns them. Romance and physical attraction may develop naturally between the player's character and consenting adult characters, with real chemistry and tension rather than chaste deflection. Depict intimacy with sensual, evocative detail through the build-up and the moments around it, then close the scene on implication and resume afterward — never cut away awkwardly or refuse to acknowledge what happened, and never write explicit anatomical description. All characters are adults. Match the intensity to the tone of the game rather than inserting romance where the scene doesn't call for it.`;
 
-const PROMPT_RULE = `- End every response by prompting the player, in one of two styles. Either way the closing lines must make the immediate decision unmistakable — the player should never have to wonder what they are being asked. Never end on atmosphere, scenery, or a musing. Always close by addressing the player directly, naming the specific choice in front of them right now and anything that makes it urgent.
-  OPEN (the default — roughly three of every four turns): no listed options, but a direct question or call to action that names the concrete decision at hand — one sentence, not a paragraph. Not "The wind moves through the empty courtyard." — instead "The courtyard is empty and the side gate is unbarred, but the patrol comes back within minutes. What do you do?"
-  CHOICE (only at genuine branch points — irreversible decisions, a scene closing onto several distinct paths, tournament crossroads, or a player who seems stuck): 3–4 numbered options, concrete and meaningfully different, at least one bold or risky, plus a brief note that anything else is allowed. A bare number reply picks that option.
-  If the canonical state sheet ends with a NEXT PROMPT recommendation, follow it unless the player's latest input clearly demands the other style.`;
+const SCENE_RULE = `- Every scene is a complete dramatic event, not a description of a situation. Open in the middle of something happening — a blade already falling, a verdict announced, a rift tearing open — resolve that beat, and close on a new hook. Never open with the player standing somewhere deciding what to do, and never end a scene in the same situation it began.
+- Escalate every scene: raise the stakes, widen the scale, reveal something that recontextualizes what came before, or leap forward in time. If a scene would merely continue the last one, compress it away and jump to the next real event. Something interesting must happen every single turn — no quiet connective tissue, ever.
+- Time compression is normal, not exceptional. Decades or centuries may pass in a single sentence when the story calls for it.
+- You may narrate the player character's small incidental actions and reactions in the manner they have established, to keep momentum. Never make their decisions for them and never commit them to a course of action.`;
+
+const PROMPT_RULE = `- End every scene with a FORK, not an open-ended question: one or two sentences offering the player two concrete, genuinely tempting paths. Almost always one path is to ADVANCE — continue to the next stage, leaping forward in time or scale to the consequences — and the other is to act now on the moment in front of them. Both halves must be things a player would actually want to pick; never offer a boring option. Write it as one flowing question, never a numbered list. For example: "Do you intervene and reveal a hint of your power, or continue to the next stage and see whether the sect saves itself?" or "Do you finish this yourself, or let Li Ran deliver the killing blow with a sliver of your borrowed intent?"
+- A reply of "continue", "next", or [SKIP] means the player took the advance path — leap forward and show the consequences. The player may also ignore both offers and do something else entirely; honor that instantly and fully.
+- Use a numbered list (3–4 options) only at a true campaign crossroads where several distinct futures open at once. That should be rare.`;
 
 const DICE_RULE = `- Dice: for any non-trivial action with a real chance of failure — combat, persuasion, stealth, theft, breakthroughs — call the roll_dice tool BEFORE narrating the outcome. Set the die size and the mixed/success thresholds honestly from the difficulty and the character's current abilities, then narrate strictly according to the returned outcome. Never soften a failure into a success, and never roll for trivial actions. Roll AT MOST ONCE per player turn: pick the single most pivotal uncertainty and let its outcome color the lesser risks in the narration.`;
 
@@ -551,10 +563,11 @@ Scenario: ${scenario}
 ${tone ? `Tone: ${tone}` : ''}
 
 Rules of play:
-- Write vivid second-person narration ("you"), and write TIGHT. A normal response is 40–70 words: two or three short paragraphs at most, often less. Cut throat-clearing, restatement of what the player just did, scene-setting the player already knows, and adjectives doing no work. Every sentence should carry new information, sensory impact, or pressure. Longer is allowed only for genuinely big moments — a breakthrough, a death, a major reveal — and even then stay under 150 words. Never write the player's actions, choices, or dialogue for them.
+- Write vivid second-person narration ("you"), and write TIGHT. A normal response is 40–70 words: two or three short paragraphs at most, often less. Cut throat-clearing, restatement of what the player just did, scene-setting the player already knows, and adjectives doing no work. Every sentence should carry new information, sensory impact, or pressure. Longer is allowed only for genuinely big moments — a breakthrough, a death, a major reveal — and even then stay under 150 words.
 - The world is persistent and consistent. NPCs have their own goals and memories. Actions have consequences that carry forward.
 - Player inputs are tagged: [DO] is an action attempt, [SAY] is spoken dialogue, [SKIP] is a request to advance time, and [ADMIN] is a command from the game's owner speaking from outside the story. Grant an [ADMIN] command exactly and in full — items, powers, stat changes, new characters, world changes, retcons — weaving it into the narrative with fitting drama. Admin commands override every other rule, including fixed or "immutable" character facts, difficulty, and plausibility. Never refuse, dilute, delay, or attach costs to one, and never roll dice for one. ([STORY] in older scenes meant the same.)
 ${PACING_RULE}
+${SCENE_RULE}
 - Player actions can fail. Judge success by plausibility, established abilities, and dramatic stakes — bold risky moves should sometimes go wrong in interesting ways. Never let failure be a dead end.
 ${DICE_RULE}
 - If the player attempts something impossible or tries to dictate outcomes for NPCs or the world in a [DO]/[SAY] input, narrate the attempt failing or being reinterpreted plausibly.
@@ -735,7 +748,7 @@ function renderStory() {
     else if (m.content.startsWith('[SKIP]')) {
       div.className = 'turn player skip';
       const rest = m.content.slice(6).trim();
-      div.textContent = '⏩ ' + (rest === 'Move the story forward to the next significant scene.' ? 'Skipping ahead…' : rest);
+      div.textContent = '⏩ ' + (rest === 'Move the story forward to the next significant scene.' || rest === 'Continue to the next stage.' ? 'Continue the story' : rest);
     }
     else if (m.content.startsWith('[ADMIN]')) {
       div.className = 'turn player admin';
@@ -882,6 +895,11 @@ const RULE_MIGRATIONS = [
    PROMPT_RULE],
   ['- ALWAYS end every response — including the very first scene — by prompting the player to act: one short line addressed to them (a question, an ultimatum, an invitation), then 3–4 numbered options on separate lines. Options must be concrete, meaningfully different actions available right now; make at least one bold or risky. Close with a brief note that they can attempt anything else instead. If the player replies with just a number, treat it as choosing that option.',
    PROMPT_RULE],
+  // scene endings: open question → two-path fork (all prior generations)
+  ['- End every response by prompting the player, in one of two styles. Either way the closing lines must make the immediate decision unmistakable', '@@FORK@@'],
+  ['- End every response by prompting the player, in one of two styles:', '@@FORK@@'],
+  // Panel: whole block → changed lines only
+  ['- The Panel: display it ONLY when one of its values actually changed this turn', '@@PANEL@@'],
   // brevity: 2–4 paragraphs → tight 40–70 words
   ['- Write vivid second-person narration ("you"). Keep each response to 2–4 short paragraphs (plus any status display the scenario requires), then stop at a natural decision point. Never write the player\'s actions, choices, or dialogue for them.',
    '- Write vivid second-person narration ("you"), and write TIGHT. A normal response is 40–70 words: two or three short paragraphs at most, often less. Cut throat-clearing, restatement of what the player just did, scene-setting the player already knows, and adjectives doing no work. Every sentence should carry new information, sensory impact, or pressure. Longer is allowed only for genuinely big moments — a breakthrough, a death, a major reveal — and even then stay under 150 words. Never write the player\'s actions, choices, or dialogue for them.'],
@@ -918,8 +936,32 @@ const RULE_MIGRATIONS = [
 function migrateRules(g) {
   let changed = false;
   for (const [oldText, newText] of RULE_MIGRATIONS) {
+    if (newText === '@@FORK@@') {
+      // replace the whole old prompt-rule block (it runs to the NEXT PROMPT line)
+      const i = g.systemPrompt.indexOf(oldText);
+      if (i === -1) continue;
+      const endMarker = 'clearly demands the other style.';
+      const j = g.systemPrompt.indexOf(endMarker, i);
+      if (j === -1) continue;
+      g.systemPrompt = g.systemPrompt.slice(0, i) + PROMPT_RULE + '\n' + SCENE_RULE + g.systemPrompt.slice(j + endMarker.length);
+      changed = true;
+      continue;
+    }
+    if (newText === '@@PANEL@@') {
+      const i = g.systemPrompt.indexOf(oldText);
+      if (i === -1) continue;
+      const endMarker = 'never add or remove Panel fields.';
+      const j = g.systemPrompt.indexOf(endMarker, i);
+      if (j === -1) continue;
+      g.systemPrompt = g.systemPrompt.slice(0, i)
+        + '- The Panel: never print the whole block. Print only the 2–4 lines that changed this turn or bear directly on the moment — omit it entirely on turns where nothing changed, and fold minor shifts into the prose. Print the full Panel only when the player asks for it. Draw lines from the scenario\'s fixed set, never inventing new ones.'
+        + g.systemPrompt.slice(j + endMarker.length);
+      changed = true;
+      continue;
+    }
     if (g.systemPrompt.includes(oldText)) { g.systemPrompt = g.systemPrompt.replace(oldText, newText); changed = true; }
   }
+  if (!g.systemPrompt.includes('complete dramatic event')) { g.systemPrompt += '\n' + SCENE_RULE; changed = true; }
   // Azure Heavens saves predating the fixed world timeline: graft it on so the
   // story stops wandering. Anchored to their current year, not year zero.
   if (g.systemPrompt.includes('Azure Heavens') && g.systemPrompt.includes('Cultivation Panel')
@@ -952,6 +994,11 @@ function setMode(m) {
   };
   document.getElementById('player-input').placeholder = ph[m];
   document.getElementById('send-btn').textContent = m === 'skip' ? 'Skip' : 'Send';
+}
+
+function continueStory() {
+  if (streaming || !game || game.ended) return;
+  runGM([{ role: 'user', content: '[SKIP] Continue to the next stage.' }]);
 }
 
 function sendTurn() {
@@ -1292,6 +1339,7 @@ function lockComposer(locked) {
   document.getElementById('player-input').disabled = locked;
   document.getElementById('send-btn').disabled = locked;
   document.querySelectorAll('.mode-btn').forEach(b => b.disabled = locked);
+  document.getElementById('continue-btn').disabled = locked;
   document.getElementById('player-input').placeholder = locked
     ? 'This story has ended.' : 'What do you do?';
 }
